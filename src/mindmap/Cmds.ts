@@ -296,63 +296,48 @@ export class ExpandNode extends Command{
 
 
  export class PasteNode extends Command {
-    node:INode
-    data:any
-    waitCollapse:any[]=[]
-    firstNode:INode
-    constructor(node:any, data:any) {
-        super('copyNode');
+    node: INode;
+    data: any[];
+    firstNode: INode;
+    wasExpanded: boolean;
+    constructor(node: INode, data: any[]) {
+        super('pasteNode');
         this.node = node;
         this.data = data;
-        this.mind= this.node.mindmap;
-        this.waitCollapse = [];
+        this.mind = node.mindmap;
+        this.wasExpanded = node.isExpand;
     }
 
-    execute():boolean {
-        this.paste();
-        return true; //exit with no error
+    execute(): boolean {
+        if (!this.node.isExpand) this.node.expand();
+        const nodes = new Map<string, INode>();
+        const collapsed: INode[] = [];
+        this.data.forEach((original: any, i: number) => {
+            // INode mutates its data; keep the command payload intact for redo.
+            const d = JSON.parse(JSON.stringify(original));
+            const n = new INode(d, this.mind);
+            const parent = i === 0 ? this.node : nodes.get(d.pid);
+            d.pid = parent.getId();
+            this.mind.addNode(n, parent);
+            nodes.set(d.id, n);
+            if (i === 0) this.firstNode = n;
+            if (d.isExpand === false || d.expanded === false) collapsed.push(n);
+            n.setPosition(0, 0);
+            n.refreshBox();
+        });
+        // Collapse after attaching all descendants, so they are hidden together.
+        collapsed.forEach(n => n.collapse());
+        this.node.clearCacheData();
+        this.refresh();
+        return true;
     }
 
     undo() {
         if (this.firstNode) {
             this.mind.removeNode(this.firstNode);
+            if (!this.wasExpanded) this.node.collapse();
             this.node.clearCacheData();
-           // this.updateItems(this.node);
-            this.refresh(this.node.mindmap);
+            this.refresh();
         }
-    }
-
-    paste() {
-        this.data.forEach((d:any, i:number) => {
-
-            var n = new INode(d, this.mind);
-
-            n.mindmap = this.mind;
-            if (!d.isExpand) {
-                this.waitCollapse.push(n);
-            }
-            if (i == 0) {
-                n.data.pid = this.node.getId();
-                this.mind.addNode(n, this.node);
-                this.firstNode = n;
-                n.setPosition(0,0);
-                n.refreshBox();
-
-            }
-            else {
-                var parent = this.mind.getNodeById(d.pid);
-                if (parent) {
-                   this.mind.addNode(n, parent);
-                   n.setPosition(0,0);
-                   n.refreshBox();
-
-                }
-            }
-
-            if (i == this.data.length - 1) {
-                n.clearCacheData();
-                this.refresh(this.mind);
-            }
-        });
     }
 }

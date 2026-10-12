@@ -104,12 +104,7 @@ export default class MindMapPlugin extends Plugin {
         const mindmapView = this.app.workspace.getActiveViewOfType(MindMapView);
         if(mindmapView){
           var mindmap = mindmapView.mindmap;
-          navigator.clipboard.writeText('');
-          var node = mindmap.selectNode;
-          if(node){
-            var text = mindmap.copyNode(node);
-            navigator.clipboard.writeText(text);
-          }
+          void mindmap.copyToClipboard();
         }
 
       }
@@ -129,15 +124,14 @@ export default class MindMapPlugin extends Plugin {
         const mindmapView = this.app.workspace.getActiveViewOfType(MindMapView);
         if(mindmapView){
           var mindmap = mindmapView.mindmap;
-          navigator.clipboard.writeText('');
-          var node = mindmap.selectNode;
-          if(node){
-            var text = mindmap.copyNode(node);
-            navigator.clipboard.writeText(text);
-            if (!node.data.isRoot && !node.data.isEdit) {
-              node.mindmap.execute("deleteNodeAndChild", { node });
-              mindmap._menuDom.style.display='none';
-            }
+          const node = mindmap.selectNode;
+          if (node && !node.data.isRoot && !node.data.isEdit) {
+            void mindmap.copyToClipboard(node).then(copied => {
+              if (copied && mindmap.getNodeById(node.getId()) === node && !node.data.isEdit) {
+                mindmap.execute('deleteNodeAndChild', { node });
+                mindmap._menuDom.style.display = 'none';
+              }
+            });
           }
         }
 
@@ -158,11 +152,7 @@ export default class MindMapPlugin extends Plugin {
         const mindmapView = this.app.workspace.getActiveViewOfType(MindMapView);
         if(mindmapView){
           var mindmap = mindmapView.mindmap;
-          navigator.clipboard.readText().then(text=>{
-              mindmap.pasteNode(text);
-              // Copy once more so that the node can be copied once more
-              navigator.clipboard.writeText(text);
-          });
+          void mindmap.pasteFromClipboard();
         }
       }
     });

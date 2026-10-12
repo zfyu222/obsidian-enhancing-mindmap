@@ -6,6 +6,7 @@ import { MindMapView } from '../MindMapView'
 import { frontMatterKey, basicFrontmatter } from '../constants';
 import Exec from './Execute'
 import {uuid} from '../MindMapView'
+import { serializeSubtree, parseSubtree, clipboardAction } from './clipboard'
 
 import importXmind  from './import/xmindZen'
 import jsZip from 'jszip'
@@ -394,6 +395,14 @@ export default class MindMap {
     }
     appKeydown(e: KeyboardEvent) {
         if (!this.isFocused) return; // Check if Mindmap is in focus or not
+        const action = clipboardAction(e, !!(this.selectNode?.data.isEdit || this.editNode?.data.isEdit));
+        if (action && this.selectNode && this.view?.app.workspace.getActiveViewOfType(MindMapView) === this.view) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (action === 'copy') void this.copyToClipboard();
+            else void this.pasteFromClipboard();
+            return;
+        }
         var keyCode = e.keyCode || e.which || e.charCode;
         var ctrlKey = e.ctrlKey || e.metaKey;
         var shiftKey = e.shiftKey;
@@ -2396,63 +2405,42 @@ export default class MindMap {
         }, 600);
     }
 
-    copyNode(node?:any){
-        var n = node||this.selectNode;
-        if(n){
-           var data:any = [];
-           function copyNode(n:INode, pid:any) {
-                  var d = n.getData();
-                  d.id = uuid();
-                  d.pid = pid;
-                  data.push({
-                      id:d.id,
-                      text:d.text,
-                      pid:pid,
-                      isExpand:d.isExpand,
-                      note:d.note
-                  });
-                  n.children.forEach((c) => {
-                     copyNode(c, d.id);
-                  });
-          }
+    copyNode(node?: INode): string {
+        const source = node || this.selectNode;
+        return source ? serializeSubtree(source) : '';
+    }
 
-           copyNode(n,null)
-
-           var _data = {
-               type:'copyNode',
-               text:data
-           };
-
-           return JSON.stringify(_data);
-
-        }else{
-            return ''
+    async copyToClipboard(node: INode = this.selectNode): Promise<boolean> {
+        if (!node || node.data.isEdit || this.editNode?.data.isEdit) return false;
+        try {
+            await navigator.clipboard.writeText(this.copyNode(node));
+            return true;
+        } catch (_) {
+            new Notice('Unable to copy mind map nodes to the clipboard.');
+            return false;
         }
-  }
+    }
 
-  pasteNode(text:string){
-        var node = this.selectNode;
-        if(text){
-            try{
-                  var json =JSON.parse(text);
-                  if(json.type&&json.type=='copyNode'){
-                    var data = json.text;
-                    if(!node.isExpand){
-                       node.expand();
-                       node.clearCacheData();
-                    }
-                   this.execute('pasteNode',{
-                       node:node,
-                       data:data
-                   })
-
-                   navigator.clipboard.writeText('');
-                  }
-            }catch(err){
-                console.log(err)
+    async pasteFromClipboard(): Promise<void> {
+        const target = this.selectNode;
+        if (!target || target.data.isEdit || this.editNode?.data.isEdit) return;
+        try {
+            const text = await navigator.clipboard.readText();
+            // The clipboard read is asynchronous; do not paste into a removed node.
+            if (this.getNodeById(target.getId()) === target && !target.data.isEdit && !this.editNode?.data.isEdit) {
+                this.pasteNode(text, target);
             }
+        } catch (_) {
+            new Notice('Unable to read mind map nodes from the clipboard.');
         }
+    }
 
-  }
+    pasteNode(text: string, node: INode = this.selectNode): boolean {
+        if (!node || node.data.isEdit) return false;
+        const data = parseSubtree(text, uuid);
+        if (!data) return false;
+        this.execute('pasteNode', { node, data });
+        return true;
+    }
 
 }

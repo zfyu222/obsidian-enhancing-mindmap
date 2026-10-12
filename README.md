@@ -42,6 +42,8 @@ The plug-in only support a limited markdown format
 | New child node            | Tab              |
 | New brother node          | enter            |
 | Delete node               | Delete           |
+| Copy node and subtree     | Ctrl/Cmd+C       |
+| Paste subtree as child    | Ctrl/Cmd+V       |
 | edit node                 | Space/dblclick node|
 | Undo                      | Ctrl/Cmd+Z       |
 | Redo                      | Ctrl/Cmd+Y       |
@@ -54,6 +56,12 @@ The plug-in only support a limited markdown format
 | Zoom in                  | Ctrl/Cmd + =       |
 | Zoom out                 | Ctrl/Cmd + -       |
 | mind map to center          | Ctrl/Cmd + E |
+
+Select a node and press Ctrl/Cmd+C, then select a destination node and press
+Ctrl/Cmd+V to insert a copy of the entire subtree as its child. You can paste
+repeatedly or into another mind map. While editing text, these shortcuts keep
+their normal text clipboard behavior. Alt+Shift+C/V commands remain available.
+Each paste is one undoable operation.
 
 ## Features
 
@@ -82,6 +90,9 @@ The plug-in only support a limited markdown format
 
 ## For developers
 Pull requests are both welcome and appreciated. 😀
+
+Run `npm test` with Node.js 18 or later for clipboard regression tests, and
+`npm run build` to generate the plugin bundle.
 
 ## Donating
 https://www.buymeacoffee.com/markmind  
