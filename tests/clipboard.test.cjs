@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 
+const clipboardNavigator = { clipboard: {} };
+const notices = [];
 const dom = {
     createElement() { return { style: {}, className: '', remove() {} }; },
     body: { appendChild() {} }
@@ -13,7 +15,7 @@ function load(file, dependencies = {}) {
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] || {}, console, setTimeout, clearTimeout, document: dom, window: {} });
+    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] || {}, console, setTimeout, clearTimeout, document: dom, window: {}, navigator: clipboardNavigator });
     return module.exports;
 }
 const selection = load('src/mindmap/selection.ts');
@@ -51,7 +53,7 @@ const { default: Exec } = load('src/mindmap/Execute.ts', {
     '../MindMapView': { uuid: id }, '../lang/helpers': { t: text => text }
 });
 const { default: MindMap } = load('src/mindmap/mindmap.ts', {
-    './clipboard': clipboard, './selection': selection, '../MindMapView': { uuid: id }, './INode': { default: Node }
+    './clipboard': clipboard, './selection': selection, '../MindMapView': { uuid: id }, './INode': { default: Node }, obsidian: { Notice: class { constructor(text) { notices.push(text); } } }
 });
 function fixture() {
     const map = Object.create(MindMap.prototype);
@@ -213,16 +215,16 @@ test('marquee selects visible intersecting nodes in viewport coordinates without
     assert.equal(map._selectionOverlay.style.display, 'none');
 });
 
-test('middle-button background drag pans while left box selection supports additive selection', () => {
+test('right-button background drag pans while left box selection supports additive selection', () => {
     const map = keyboardFixture();
     const node = add(map, map.root, 'A');
     map.setSelectedNodes([node]);
     const background = { closest: () => null };
-    map.appMouseDown({ button: 1, clientX: 100, clientY: 100, target: background, preventDefault() {} });
+    map.appMouseDown({ button: 2, clientX: 100, clientY: 100, target: background, preventDefault() {} });
     map.appMouseMove({ clientX: 120, clientY: 130 });
     assert.equal(map.containerEL.scrollLeft, -5);
     assert.equal(map.containerEL.scrollTop, -5);
-    map.appMouseUp({ button: 1 });
+    map.appMouseUp({ button: 2 });
     assert.equal(map.getSelectedNodes()[0], node);
     const b = add(map, map.root, 'B');
     b.rect = { left: 60, top: 40, right: 120, bottom: 70, width: 60, height: 30 };
@@ -436,4 +438,68 @@ test('Ctrl/Cmd hotkeys only operate outside text editing', () => {
         { target: { isContentEditable: true } }, { target: { closest: () => ({}) } }]) {
         assert.equal(clipboard.clipboardAction({ ...event, ...props }, false), null);
     }
+});
+
+
+test('right panning suppresses drag context menus but middle button and plain right clicks do not pan/menu-block', () => {
+    const map = keyboardFixture(); const target = { closest: () => null };
+    map.appMouseDown({ button: 1, target }); assert.ok(!map._panning);
+    map.appMouseDown({ button: 2, target, clientX: 40, clientY: 40, preventDefault() {} });
+    map.appMouseMove({ clientX: 65, clientY: 55 });
+    map.appMouseUp({ button: 0 }); assert.equal(map._panning, true);
+    map.appMouseUp({ button: 2 }); assert.equal(map._panning, false);
+    let prevented = false;
+    map.appContextMenu({ preventDefault() { prevented = true; }, stopImmediatePropagation() {} });
+    assert.equal(prevented, true);
+    map.appMouseDown({ button: 2, target, clientX: 40, clientY: 40, preventDefault() {} });
+    map.appMouseUp({ button: 2 }); prevented = false;
+    map.appContextMenu({ preventDefault() { prevented = true; }, stopImmediatePropagation() {} });
+    assert.equal(prevented, false);
+});
+
+test('ordinary text and images paste as an ordered forest and undo/redo once', async () => {
+    const map = keyboardFixture(); const target = map.root;
+    const images = [{ type: 'image/png' }, { type: 'image/jpeg' }];
+    let saved = 0; map.view.saveClipboardImage = async () => `![[Assets/image-${++saved}.png]]`;
+    await map.pasteContent('First\r\n\r\n**Second**', images, target);
+    assert.deepEqual(target.children.map(n => n.data.text), ['First', '**Second**', '![[Assets/image-1.png]]', '![[Assets/image-2.png]]']);
+    assert.equal(map.exec.history.undos.length, 1);
+    map.undo(); assert.equal(target.children.length, 0);
+    map.redo(); assert.equal(target.children.length, 4); assert.equal(saved, 2);
+});
+
+test('internal subtree takes precedence over image representations and stays intact', async () => {
+    const map = keyboardFixture(); let saved = 0;
+    map.view.saveClipboardImage = async () => { saved++; };
+    await map.pasteContent(clipboard.serializeSubtree(source()), [{}], map.root);
+    assert.equal(saved, 0); assert.equal(map.root.children.length, 1);
+    assert.equal(map.root.children[0].children[0].children.length, 1);
+});
+
+test('async image paste refuses removed destinations or editors, and failure creates no partial nodes', async () => {
+    const map = keyboardFixture(); const target = add(map, map.root, 'Target');
+    map.view.saveClipboardImage = async () => { map.removeNode(target); return '![[image.png]]'; };
+    await map.pasteContent('Text', [{}], target); assert.equal(target.children.length, 0);
+    map.view.saveClipboardImage = async () => { throw new Error('Write failed'); };
+    await map.pasteContent('Text', [{}], map.root); assert.equal(map.root.children.length, 0);
+    map.root.data.isEdit = true;
+    await map.pasteContent('Text', [], map.root); assert.equal(map.root.children.length, 0);
+});
+
+test('clipboard API reads mixed text/image, falls back to text, and uses root without selection', async () => {
+    const map = keyboardFixture(); map.selectNode = null;
+    map.view.saveClipboardImage = async () => '![[picture.png]]';
+    clipboardNavigator.clipboard = { read: async () => [{ types: ['text/plain', 'image/png'], getType: async type => type === 'text/plain' ? { text: async () => 'Text' } : { type } }] };
+    await map.pasteFromClipboard(); assert.deepEqual(map.root.children.map(n => n.data.text), ['Text', '![[picture.png]]']);
+    clipboardNavigator.clipboard = { read: async () => { throw Error('Permission'); }, readText: async () => 'Fallback' };
+    await map.pasteFromClipboard(); assert.equal(map.root.children.at(-1).data.text, 'Fallback');
+});
+
+test('native paste event creates nodes only inside active map and outside text editing', async () => {
+    const map = keyboardFixture(); let called = 0;
+    map.pasteContent = async (text, images, target) => { called++; assert.equal(text, 'Text'); assert.equal(images.length, 1); assert.equal(target, map.root); };
+    const event = { target: { closest: () => null }, clipboardData: { getData: () => 'Text', files: [{ type: 'image/png' }, { type: 'application/pdf' }] }, preventDefault() { this.defaultPrevented = true; }, stopImmediatePropagation() {} };
+    map.appPaste(event); assert.equal(called, 1); assert.equal(event.defaultPrevented, true);
+    map.appPaste({ ...event, defaultPrevented: false, target: { closest: () => ({}) } }); assert.equal(called, 1);
+    map.root.data.isEdit = true; map.appPaste({ ...event, defaultPrevented: false }); assert.equal(called, 1);
 });

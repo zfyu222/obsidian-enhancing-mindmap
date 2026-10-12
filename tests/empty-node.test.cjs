@@ -98,3 +98,18 @@ test('explicitly empty new node remains empty while omitted text uses the defaul
     exec.execute('addChildNode', { parent });
     assert.equal(added[0].data.text, ''); assert.equal(added[1].data.text, 'Sub title');
 });
+
+
+test('image attachment uses configured folder and generates a durable Markdown embed', async () => {
+    const view = Object.create(MindMapView.prototype); view.file = { path: 'Notes/map.md' };
+    const calls = [];
+    view.app = { fileManager: {
+        async getAvailablePathForAttachment(name, source) { calls.push([name, source]); return 'Assets/picture.png'; },
+        generateMarkdownLink(file, source) { assert.equal(source, 'Notes/map.md'); return `[[${file.path}]]`; }
+    }, vault: { async createBinary(path, buffer) { assert.equal(path, 'Assets/picture.png'); assert.equal(buffer.byteLength, 3); return { path }; } } };
+    const link = await view.saveClipboardImage({ type: 'image/png', arrayBuffer: async () => new ArrayBuffer(3) });
+    assert.equal(link, '![[Assets/picture.png]]'); assert.match(calls[0][0], /\.png$/); assert.equal(calls[0][1], view.file.path);
+    await assert.rejects(view.saveClipboardImage({ type: 'image/unknown' }), /Unsupported/);
+    delete view.app.fileManager.getAvailablePathForAttachment;
+    await assert.rejects(view.saveClipboardImage({ type: 'image/png' }), /1.5.7/);
+});

@@ -1,5 +1,6 @@
 import {
   HoverParent,
+  FileManager,
   HoverPopover,
   Menu,
   TextFileView,
@@ -452,6 +453,20 @@ export class MindMapView extends TextFileView implements HoverParent {
     var path = file.path;
     let md = await this.app.vault.adapter.read(path);
     this.onQuickPreview(file, md);
+  }
+
+  async saveClipboardImage(image: Blob): Promise<string> {
+    const extensions: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp', 'image/svg+xml': 'svg', 'image/avif': 'avif' };
+    const extension = extensions[image.type];
+    if (!extension) throw new Error('Unsupported clipboard image type');
+    const filename = `Pasted-image-${Date.now()}-${uuid()}.${extension}`;
+    const manager = this.app.fileManager as FileManager & {
+      getAvailablePathForAttachment?: (filename: string, sourcePath: string) => Promise<string>;
+    };
+    if (!manager.getAvailablePathForAttachment) throw new Error('Image paste requires Obsidian 1.5.7 or later');
+    const path = await manager.getAvailablePathForAttachment(filename, this.file?.path || '');
+    const file = await this.app.vault.createBinary(path, await image.arrayBuffer());
+    return '!' + manager.generateMarkdownLink(file, this.file?.path || '');
   }
 
   getMdText(str: string) {

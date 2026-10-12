@@ -12,11 +12,11 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(bundle);
-const code = ['clipboardAction', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'MindMap'].map(name => {
+const code = ['__awaiter', 'clipboardAction', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'MindMap'].map(name => {
     assert.ok(declarations.has(name), `Release bundle missing ${name}`);
     return declarations.get(name);
 }).join('\n');
-const MindMap = vm.runInNewContext(`${code}\nMindMap`, { MindMapView: class {} });
+const MindMap = vm.runInNewContext(`${code}\nMindMap`, { MindMapView: class {}, uuid: () => `fresh-${Math.random()}`, Notice: class {} });
 const map = Object.create(MindMap.prototype);
 map.isFocused = true;
 map.view = { app: { workspace: { getActiveViewOfType: () => map.view } } };
@@ -86,3 +86,20 @@ empty.mindmap = { emit() {}, execute(command, data) {
 empty.cancelEdit(); assert.equal(empty.data.text, '');
 empty.parseText(); assert.equal(empty.data.text, '');
 console.log('Release bundle empty-node edit, rendering and parser cleanup checks passed.');
+
+(async () => {
+    const pasteMap = Object.create(MindMap.prototype);
+    const target = { data: {} }; let result;
+    pasteMap.canPasteTo = () => true; pasteMap.pasteNode = () => false;
+    pasteMap.view = { saveClipboardImage: async () => '![[Assets/picture.png]]' };
+    pasteMap.execute = (command, data) => { assert.equal(command, 'pasteNode'); result = data; };
+    await pasteMap.pasteContent('One\nTwo', [{ type: 'image/png' }], target);
+    assert.deepEqual(Array.from(result.data, n => n.text), ['One', 'Two', '![[Assets/picture.png]]']);
+    assert.equal(result.node, target);
+    pasteMap.containerEL = { scrollLeft: 100, scrollTop: 80 };
+    pasteMap.appMouseDown({ button: 2, target: { closest: () => null }, clientX: 10, clientY: 10, preventDefault() {} });
+    pasteMap.appMouseMove({ clientX: 30, clientY: 40 });
+    assert.equal(pasteMap.containerEL.scrollLeft, 80); assert.equal(pasteMap.containerEL.scrollTop, 50);
+    pasteMap.appMouseUp({ button: 2 }); assert.equal(pasteMap._panning, false);
+    console.log('Release bundle right-button panning and text/image paste checks passed.');
+})().catch(error => { console.error(error); process.exitCode = 1; });

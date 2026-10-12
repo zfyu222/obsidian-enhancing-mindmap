@@ -67,6 +67,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             document.addEventListener('mousemove',e=>map.appMouseMove(e));
             document.addEventListener('mouseup',e=>map.appMouseUp(e));
             document.addEventListener('keydown',e=>map.appKeydown(e),true);
+            document.addEventListener('paste',e=>map.appPaste(e),true);
+            map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
             window.snapshot=()=>({selected:map.getSelectedNodes().map(n=>n.getId()),roots:map.getSelectedRoots().map(n=>n.getId()),children:map.root.children.map(n=>n.getId()),target:target.children.map(n=>n.getId()),scroll:[map.containerEL.scrollLeft,map.containerEL.scrollTop],undos:map.exec.history.undos.length});
@@ -106,7 +108,41 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.keyboard.press('Control+z');
         state = await page.evaluate(() => snapshot());
         assert.deepEqual(state.children, ['Branch A', 'Branch B', 'Target']);
+        await page.evaluate(() => {
+            testMap.containerEL.scrollLeft = 100; testMap.containerEL.scrollTop = 80;
+            window.contextBlocked = [];
+            document.addEventListener('contextmenu', e => contextBlocked.push(e.defaultPrevented));
+        });
+        await page.mouse.move(700, 420); await page.mouse.down({ button: 'right' });
+        await page.mouse.move(750, 450, { steps: 6 }); await page.mouse.up({ button: 'right' });
+        assert.deepEqual((await page.evaluate(() => snapshot())).scroll, [50, 50]);
+        assert.equal(await page.evaluate(() => lastContextPrevented), true);
+        await page.evaluate(() => { testMap.containerEL.scrollLeft = 0; testMap.containerEL.scrollTop = 0; });
+        await page.locator('[data-id="Target"]').click();
+        await page.evaluate(() => {
+            testMap.view.saveClipboardImage = async image => {
+                if (!(image instanceof Blob) || image.type !== 'image/png') throw Error('Expected PNG');
+                return '![[Assets/pasted.png]]';
+            };
+            navigator.clipboard.read = async () => [{ types: ['text/plain', 'image/png'],
+                getType: async type => new Blob([type === 'text/plain' ? 'One\nTwo' : 'PNG'], { type }) }];
+        });
+        await page.keyboard.press('Control+v');
+        await page.waitForFunction(() => testNodes.target.children.length === 3);
+        assert.deepEqual(await page.evaluate(() => testNodes.target.children.map(n => n.data.text)), ['One', 'Two', '![[Assets/pasted.png]]']);
+        await page.keyboard.press('Control+z');
+        assert.equal((await page.evaluate(() => snapshot())).target.length, 0);
+        await page.evaluate(() => {
+            testMap.setSelectedNodes([testNodes.target]);
+            const data = new DataTransfer(); data.setData('text/plain', 'Native paste');
+            data.items.add(new File(['PNG'], 'image.png', { type: 'image/png' }));
+            testNodes.target.containEl.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
+        });
+        await page.waitForFunction(() => testNodes.target.children.length === 2);
+        assert.deepEqual(await page.evaluate(() => testNodes.target.children.map(n => n.data.text)), ['Native paste', '![[Assets/pasted.png]]']);
+        await page.keyboard.press('Control+z');
+        assert.equal((await page.evaluate(() => snapshot())).target.length, 0);
         assert.deepEqual(errors, []);
-        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop and Ctrl+Z passed.');
+        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste and Ctrl+Z passed.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

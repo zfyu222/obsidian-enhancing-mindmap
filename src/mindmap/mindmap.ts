@@ -48,6 +48,8 @@ export default class MindMap {
     _selectionMoved = false;
     _selectionOverlay?: HTMLElement;
     _panning = false;
+    _panMoved = false;
+    _suppressContextUntil = 0;
     _suppressClickUntil = 0;
     setting: Setting;
     data: INodeData;
@@ -148,6 +150,8 @@ export default class MindMap {
 
         this.appMouseDown = this.appMouseDown.bind(this);
         this.appMouseUp = this.appMouseUp.bind(this);
+        this.appContextMenu = this.appContextMenu.bind(this);
+        this.appPaste = this.appPaste.bind(this);
 
         this.appFocusIn = this.appFocusIn.bind(this);
         this.appFocusOut = this.appFocusOut.bind(this);
@@ -320,6 +324,8 @@ export default class MindMap {
 
     initEvent() {
         this.appEl.addEventListener('click', this.appClickFn);
+        this.appEl.addEventListener('contextmenu', this.appContextMenu, true);
+        document.addEventListener('paste', this.appPaste, true);
         this.appEl.addEventListener('mouseover', this.appMouseOverFn);
         this.appEl.addEventListener('dblclick', this.appDblclickFn);
         this.appEl.addEventListener('dragstart', this.appDragstart);
@@ -351,6 +357,8 @@ export default class MindMap {
 
     removeEvent() {
         this.appEl.removeEventListener('click', this.appClickFn);
+        this.appEl.removeEventListener('contextmenu', this.appContextMenu, true);
+        document.removeEventListener('paste', this.appPaste, true);
         this.appEl.removeEventListener('dragstart', this.appDragstart);
         this.appEl.removeEventListener('dragover', this.appDragover);
         this.appEl.removeEventListener('dragend', this.appDragend);
@@ -430,7 +438,7 @@ export default class MindMap {
             e.stopImmediatePropagation();
         };
         const action = clipboardAction(e, editing);
-        if (action && node) {
+        if (action && (node || (action === 'paste' && this.root))) {
             consume();
             if (action === 'copy') void this.copyToClipboard();
             else void this.pasteFromClipboard();
@@ -1791,6 +1799,7 @@ export default class MindMap {
 
     appMouseMove(evt: MouseEvent) {
         if (this._panning) {
+            if (Math.abs(evt.clientX - this.startX) + Math.abs(evt.clientY - this.startY) >= 4) this._panMoved = true;
             this.containerEL.scrollLeft = this._left - (evt.clientX - this.startX);
             this.containerEL.scrollTop = this._top - (evt.clientY - this.startY);
             return;
@@ -1829,9 +1838,11 @@ export default class MindMap {
     appMouseDown(evt: MouseEvent) {
         const target = evt.target as HTMLElement;
         if (target.closest('.mm-node-menu, .mm-node-bar, a, input, textarea, [contenteditable="true"]')) return;
-        if (evt.button === 1) {
+        if (evt.button === 2) {
             evt.preventDefault();
             this._panning = true;
+            this._panMoved = false;
+            this._suppressContextUntil = 0;
             this.startX = evt.clientX;
             this.startY = evt.clientY;
             this._left = this.containerEL.scrollLeft;
@@ -1860,7 +1871,17 @@ export default class MindMap {
             if (this._selectionOverlay) this._selectionOverlay.style.display = 'none';
             if (this.selectNode) this.selectNode.select(true);
         }
-        this._panning = false;
+        if (this._panning && (evt.type === 'blur' || (evt as MouseEvent).button === 2)) {
+            if (this._panMoved) this._suppressContextUntil = Date.now() + 500;
+            this._panning = false;
+        }
+    }
+
+    appContextMenu(evt: MouseEvent) {
+        if (this._panning || Date.now() < this._suppressContextUntil) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+        }
     }
 
     appDblclickFn(evt: MouseEvent) {
@@ -2474,17 +2495,65 @@ export default class MindMap {
         }
     }
 
+    canPasteTo(target: INode): boolean {
+        return !!target && this.getNodeById(target.getId()) === target &&
+            !target.data.isEdit && !this.editNode?.data.isEdit &&
+            this.view?.app.workspace.getActiveViewOfType(MindMapView) === this.view;
+    }
+
+    appPaste(evt: ClipboardEvent) {
+        const element = evt.target as HTMLElement;
+        if (evt.defaultPrevented || !this.canPasteTo(this.selectNode || this.root) ||
+            (element ? !this.containerEL.contains(element) : !this.isFocused) ||
+            element?.closest('input, textarea, [contenteditable="true"]')) return;
+        const data = evt.clipboardData;
+        if (!data) return;
+        const text = data.getData('text/plain');
+        const images = Array.from(data.files).filter(file => file.type.startsWith('image/'));
+        if (!text && !images.length) return;
+        evt.preventDefault(); evt.stopImmediatePropagation();
+        void this.pasteContent(text, images, this.selectNode || this.root);
+    }
+
     async pasteFromClipboard(): Promise<void> {
-        const target = this.selectNode;
-        if (!target || target.data.isEdit || this.editNode?.data.isEdit) return;
+        const target = this.selectNode || this.root;
+        if (!this.canPasteTo(target)) return;
         try {
-            const text = await navigator.clipboard.readText();
-            // The clipboard read is asynchronous; do not paste into a removed node.
-            if (this.getNodeById(target.getId()) === target && !target.data.isEdit && !this.editNode?.data.isEdit) {
-                this.pasteNode(text, target);
-            }
+            let text = '';
+            const images: Blob[] = [];
+            const clipboard = navigator.clipboard as typeof navigator.clipboard & {
+                read?: () => Promise<Array<{ types: string[], getType(type: string): Promise<Blob> }>>;
+            };
+            if (clipboard.read) {
+                try {
+                    for (const item of await clipboard.read()) {
+                        if (item.types.includes('text/plain')) text += await (await item.getType('text/plain')).text();
+                        const imageType = item.types.find(type => type.startsWith('image/'));
+                        if (imageType) images.push(await item.getType(imageType));
+                    }
+                } catch (_) { text = await clipboard.readText(); }
+            } else text = await clipboard.readText();
+            await this.pasteContent(text, images, target);
         } catch (_) {
-            new Notice('Unable to read mind map nodes from the clipboard.');
+            new Notice('Unable to paste clipboard content into the mind map.');
+        }
+    }
+
+    async pasteContent(text: string, images: Blob[], target: INode): Promise<void> {
+        if (!this.canPasteTo(target)) return;
+        // Internal node data takes precedence over other clipboard representations.
+        if (this.pasteNode(text, target)) return;
+        const texts = text.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim().length > 0);
+        try {
+            for (const image of images) {
+                if (!this.canPasteTo(target)) return;
+                texts.push(await this.view.saveClipboardImage(image));
+            }
+            if (!texts.length || !this.canPasteTo(target)) return;
+            const data = texts.map(content => ({ id: uuid(), pid: null, text: content, isRoot: false, isEdit: false, expanded: true, isExpand: true }));
+            this.execute('pasteNode', { node: target, data });
+        } catch (_) {
+            new Notice('Unable to save clipboard image. No nodes were pasted.');
         }
     }
 

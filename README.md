@@ -12,6 +12,16 @@ Empty headings/list items remain ordinary Markdown and survive reopening,
 including collapsed nodes. Text changes support undo/redo; empty nodes retain
 a minimum clickable size. Update through BRAT to beta.4 or later.
 
+Since 0.2.6-beta.5, drag with the right mouse button to pan the canvas;
+left dragging selects nodes. Ctrl/Cmd+V accepts regular clipboard text and images:
+each nonempty text line and each image becomes a child of the selected node (or
+root when nothing is selected). One paste is one undo. Internal node clipboard
+payloads keep their subtree behavior; editing text retains native paste.
+Images are saved using Obsidian's configured attachment location and embedded as
+Markdown links. Image attachments remain after undo for redo and existing links.
+Image paste requires Obsidian 1.5.7+; clipboard image availability also depends on
+the platform. Browser fixture tests simulate the clipboard and vault API.
+
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
 run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.
 Push a tag matching the version exactly, without a `v` prefix. The release
