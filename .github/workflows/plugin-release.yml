@@ -1,0 +1,44 @@
+name: Publish mind map plugin
+
+on:
+  push:
+    tags: ['[0-9]*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check release version
+        run: |
+          node - <<'NODE'
+          const manifest = require('./manifest.json');
+          const pkg = require('./package.json');
+          const versions = require('./versions.json');
+          const tag = process.env.RELEASE_TAG;
+          if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag) ||
+              manifest.version !== tag || pkg.version !== tag ||
+              versions[tag] !== manifest.minAppVersion) {
+            throw new Error('Tag, manifest, npm version and compatibility map must agree');
+          }
+          NODE
+      - run: npm test
+      - run: npm run build
+      - name: Publish BRAT assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          options=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then options+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" main.js manifest.json styles.css \
+            --verify-tag --title "$RELEASE_TAG" --generate-notes "${options[@]}"

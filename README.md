@@ -1,4 +1,18 @@
 # obsidian-enhancing-mindmap-plugin
+
+This fork is maintained for the [OBSB project](https://github.com/zfyu222/OBSB).
+Install BRAT from Obsidian's Community Plugins, add
+`zfyu222/obsidian-enhancing-mindmap`, and select the latest release (or a specific
+beta tag). Releases contain the compiled `main.js`, `manifest.json` and `styles.css`.
+The plugin ID is unchanged, so this fork replaces an existing installation of
+Enhancing Mindmap in the same vault.
+
+For releases, update `manifest.json`, `package.json` and `versions.json` together,
+run `npm ci --ignore-scripts`, `npm test` and `npm run build`, then commit and push.
+Push a tag matching the version exactly, without a `v` prefix. The release
+workflow validates versions, tests, builds and uploads BRAT assets; tags with
+a prerelease suffix are published as prereleases. Compiled `main.js` remains
+an upstream tracked file; release builds are generated from source, not that file.
 [English](https://github.com/MarkMindCkm/obsidian-enhancing-mindmap) [中文](https://github.com/MarkMindCkm/obsidian-enhancing-mindmap/blob/main/Readme-zh.md)
 
 ![test](https://user-images.githubusercontent.com/18719494/124454742-63ec8580-ddbb-11eb-8da0-7cd44f38a225.gif)
