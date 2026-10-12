@@ -18,9 +18,28 @@
 
 .mm-toolbar button {
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: 32px;
   padding: 4px 10px;
   white-space: nowrap;
+}
+
+.mm-toolbar button.mm-toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  color: var(--text-normal, #444);
+}
+
+.mm-toolbar-icon svg {
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.mm-toolbar button[data-action="reset"] {
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
 }
 
 .mm-toolbar button:disabled {

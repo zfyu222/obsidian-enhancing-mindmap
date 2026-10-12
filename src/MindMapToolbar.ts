@@ -33,10 +33,26 @@ export default class MindMapToolbar {
     this.element.addEventListener('mousedown', event => {
       if (event.button === 0) event.preventDefault();
     });
+    // Inline SVG keeps icons available on older Obsidian versions as well.
+    const icons: Record<string, string> = {
+      child: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M7 9v8h5m5-4v8m-4-4h8"/>',
+      sibling: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M3 13h8m-4-4v12m10-12v8m-4-4h8"/>',
+      delete: '<path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6m4-6v6"/>',
+      undo: '<path d="M9 4 4 9l5 5M4 9h9a7 7 0 0 1 7 7v4"/>',
+      redo: '<path d="m15 4 5 5-5 5m5-5h-9a7 7 0 0 0-7 7v4"/>',
+      zoomOut: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6"/>',
+      zoomIn: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6m-3-3v6"/>',
+      center: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="12" cy="12" r="3"/>'
+    };
     const button = (id: string, label: string, title: string, action: () => void) => {
       const el = document.createElement('button');
       el.type = 'button';
-      el.textContent = label;
+      if (icons[id]) {
+        el.classList.add('mm-toolbar-icon');
+        el.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${icons[id]}</svg>`;
+      } else {
+        el.textContent = label;
+      }
       el.title = title;
       el.setAttribute('aria-label', title);
       el.dataset.action = id;
