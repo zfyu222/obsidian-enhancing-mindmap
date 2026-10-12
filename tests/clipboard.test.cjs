@@ -42,7 +42,7 @@ class Node {
     select(preserve) { ActualNode.prototype.select.call(this, preserve); }
     unSelect() { ActualNode.prototype.unSelect.call(this); }
     isShow() { return !this.isHide; }
-    edit() { this.data.isEdit = true; this.mindmap.editNode = this; }
+    edit() { this._oldText = this.data.text; this.contentEl = { innerText: this.data.text, contains: () => true }; this.data.isEdit = true; this.mindmap.editNode = this; }
     cancelEdit() { this.data.isEdit = false; }
 }
 const commands = load('src/mindmap/Cmds.ts', { './INode': { default: Node }, './selection': selection });
@@ -524,4 +524,37 @@ test('clicking another node commits the previous editor once and selects the des
     const target = { tagName: 'DIV', hasClass: () => false, closest: selector => selector === '.mm-node' ? element : null };
     map.appClickFn({ target });
     assert.equal(commits, 1); assert.equal(map.editNode, null); assert.equal(map.selectNode, other);
+});
+
+
+test('Ctrl/Cmd+Z removes a newly added unchanged node from its auto-editor, and redo restores it', async () => {
+    const map = keyboardFixture(); press(map, 'Tab'); await nextTick();
+    const added = map.selectNode; assert.equal(added.data.isEdit, true);
+    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, true);
+    assert.equal(map.root.children.length, 0); assert.equal(map.editNode, null);
+    assert.equal(map.selectNode, map.root); assert.equal(map.exec.history.redos.length, 1);
+    press(map, 'y', { ctrlKey: true }); await nextTick();
+    assert.equal(map.root.children[0], added);
+    assert.equal(press(map, 'z', { metaKey: true }).defaultPrevented, true);
+    assert.equal(map.root.children.length, 0);
+});
+
+test('new node typing retains native undo until text returns to the original content', async () => {
+    const map = keyboardFixture(); press(map, 'Tab'); await nextTick();
+    const added = map.selectNode; added.contentEl.innerText = 'New words';
+    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, undefined);
+    assert.equal(map.root.children.length, 1);
+    added.contentEl.innerText = added._oldText; // Browser text undo restored the initial placeholder.
+    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, true);
+    assert.equal(map.root.children.length, 0);
+});
+
+test('fast undo before scheduled editor cannot refocus a removed node, even across rapid redo/undo', async () => {
+    const map = keyboardFixture(); press(map, 'Tab');
+    press(map, 'z', { ctrlKey: true });
+    assert.equal(map.selectNode, map.root); assert.equal(map.root.children.length, 0);
+    press(map, 'y', { ctrlKey: true }); press(map, 'z', { ctrlKey: true });
+    await nextTick(); assert.equal(map.selectNode, map.root);
+    assert.equal(map.editNode, null); assert.equal(map.root.children.length, 0);
+    assert.equal(map.exec.history.undos.length, 0); assert.equal(map.exec.history.redos.length, 1);
 });

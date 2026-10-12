@@ -111,3 +111,13 @@ console.log('Release bundle editor click/double-click/drag routing checks passed
     pasteMap.appMouseUp({ button: 2 }); assert.equal(pasteMap._panning, false);
     console.log('Release bundle right-button panning and text/image paste checks passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+
+const newNode = { data: { isEdit: true }, _oldText: 'Sub title', contentEl: { innerText: 'Sub title', contains: () => true } };
+map.editNode = map.selectNode = newNode;
+map.exec = { history: { undos: [{ name: 'addNode', node: newNode }] } };
+let creationUndos = 0; map.undo = () => { creationUndos++; };
+key('z', { ctrlKey: true }); assert.equal(creationUndos, 1);
+newNode.contentEl.innerText = 'Changed';
+map.appKeydown({ key: 'z', ctrlKey: true, target: null });
+assert.equal(creationUndos, 1, 'edited text remains native undo');
+console.log('Release bundle new-node editor undo routing passed.');

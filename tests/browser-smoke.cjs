@@ -13,7 +13,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
+const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -28,7 +28,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
           #status{margin:16px}</style><h3>Mind map batch selection — release bundle test harness</h3><div id="viewport"><div id="map"></div></div><div id="status"></div>`);
         await page.addScriptTag({ content: `(() => {
             ${code}
-            const cmd = { ChangeNodeText, RemoveNodes, MoveNodes, PasteNode };
+            const cmd = { AddNode, ChangeNodeText, RemoveNodes, MoveNodes, PasteNode };
             const t = text => text;
             const obsidian = { MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
             const MindMapView = class {};
@@ -40,6 +40,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                     this.containEl.setAttribute('data-id',data.id);this.containEl.tabIndex=-1;
                     this.contentEl=document.createElement('div');this.contentEl.className='mm-node-content';this.contentEl.textContent=data.text;this.containEl.append(this.contentEl);
                 }
+                selectText(){ProdNode.prototype.selectText.call(this)}
                 edit(){ProdNode.prototype.edit.call(this)} cancelEdit(){ProdNode.prototype.cancelEdit.call(this)}
                 setText(text){ProdNode.prototype.setText.call(this,text)} parseText(){ProdNode.prototype.parseText.call(this)} _delay(){}
                 getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
@@ -173,7 +174,28 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(() => testNodes.target.data.text), updated);
         await page.keyboard.press('Control+z');
         assert.equal(await page.evaluate(() => testNodes.target.data.text), 'Alpha beta gamma');
+        await page.locator('[data-id="Branch B"]').click();
+        await page.keyboard.press('Tab');
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit && testMap.editNode.parent === testNodes.b);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        assert.equal(await page.evaluate(() => testMap.editNode), null);
+        assert.equal(await page.evaluate(() => testMap.selectNode === testNodes.b), true);
+        await page.keyboard.press('Control+y');
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        await page.keyboard.type('Typed text');
+        assert.equal(await page.evaluate(() => testMap.editNode.contentEl.innerText), 'Typed text');
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 1);
+        assert.equal(await page.evaluate(() => testMap.editNode.contentEl.innerText), 'Sub title');
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        assert.equal(await page.evaluate(() => testMap.root.children.length), 4);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testMap.root.children.length), 3);
         assert.deepEqual(errors, []);
-        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection and Ctrl+Z passed.');
+        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, new-node editor undo and Ctrl+Z passed.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

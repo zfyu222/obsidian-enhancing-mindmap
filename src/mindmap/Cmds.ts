@@ -27,6 +27,7 @@ export class AddNode extends Command {
     parent:INode = null;
     mind:MindMap =null;
     index:number = -1;
+    editTimer?: ReturnType<typeof setTimeout>;
     constructor(node:INode, parent:INode, mind?:MindMap) {
         super('addNode');
         this.node = node;
@@ -42,7 +43,9 @@ export class AddNode extends Command {
         this.node.refreshBox();
         this.refresh();
         this.mind.clearSelectNode();
-        setTimeout(()=>{
+        clearTimeout(this.editTimer);
+        this.editTimer = setTimeout(()=>{
+            if (this.mind.getNodeById(this.node.getId()) !== this.node) return;
             this.node.select();
             this.node.edit();
         },0);
@@ -50,13 +53,12 @@ export class AddNode extends Command {
     }
 
     undo() {
+        clearTimeout(this.editTimer);
         var p = this.node.parent;
-        this.index = this.mind.removeNode(this.node);
         this.mind.clearSelectNode();
-        setTimeout(()=>{
-            this.refresh();
-            p&&p.select();
-        },0)
+        this.index = this.mind.removeNode(this.node);
+        this.refresh();
+        p&&p.select();
     }
 }
 

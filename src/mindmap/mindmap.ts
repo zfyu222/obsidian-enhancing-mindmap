@@ -446,6 +446,18 @@ export default class MindMap {
         }
         const key = e.key.toLowerCase();
         const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.altKey && !e.shiftKey && key === 'z' && editing) {
+            const editor = this.editNode || node;
+            const history = this.exec?.history;
+            const latest = history?.undos[history.undos.length - 1];
+            // The first auto-editor has no text edit to undo until its content changes.
+            if (latest?.name === 'addNode' && (latest as typeof latest & { node?: INode }).node === editor &&
+                editor.contentEl.innerText.trim() === editor._oldText?.trim()) {
+                consume();
+                this.undo();
+            }
+            return;
+        }
         if (mod && !e.altKey && !editing) {
             if (key === 'z' || (key === 'y' && !e.shiftKey)) {
                 consume();

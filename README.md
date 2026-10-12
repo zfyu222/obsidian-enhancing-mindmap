@@ -27,6 +27,11 @@ without refocusing the node container. Double-clicking selects words normally,
 and editing temporarily disables node dragging. Clicking another node still
 commits text changes, which can be undone.
 
+Since 0.2.6-beta.7, Ctrl/Cmd+Z removes a just-created node from its automatic
+editor if its text is unchanged. Typed content keeps native text undo; when that
+returns to the initial content, another undo removes the node. Fast undo cancels
+the pending editor callback and synchronously restores parent selection.
+
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
 run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.
 Push a tag matching the version exactly, without a `v` prefix. The release
