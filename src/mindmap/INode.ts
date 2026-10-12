@@ -39,6 +39,7 @@ interface BOX {
 }
 
 export class INodeData implements INode{
+    summaryMember?: boolean;
     id:string;
     text:string;
     pid?:string;
@@ -534,7 +535,7 @@ export default class Node {
 
         if(!this.data.isRoot){
             level++;
-            while (parent && parent != this.mindmap.root) {
+            while (parent && !parent.data.isRoot) {
                 level++;
                 parent = parent.parent;
             }

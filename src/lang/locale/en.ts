@@ -1,6 +1,15 @@
 // English
 
 export default {
+    "Move within the same tree": "Move nodes within the same tree; use copy/paste to transfer between trees.",
+    "Select at least one node": "Select at least one node",
+    "Select nodes in the main tree": "Select nodes in the main tree",
+    "Summary members must have the same parent": "Summary members must have the same parent",
+    "Summary members must be on the same side": "Summary members must be on the same side",
+    "Summary members must be consecutive siblings": "Summary members must be consecutive siblings",
+    "Summary": "Summary",
+    "Add summary": "Add summary",
+    "Invalid summary data preserved": "Invalid summary data was preserved. Repair the Markdown references before editing summaries.",
     "Mind map toolbar": "Mind map toolbar",
     "Add child": "Add child",
     "Add sibling": "Add sibling",

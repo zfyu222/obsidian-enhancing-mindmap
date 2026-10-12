@@ -75,7 +75,7 @@ export class RemoveNode extends Command {
         this.mind = mind||this.node.mindmap;
     }
     execute():boolean {
-        if(this.node.data.isRoot == true){
+        if(this.node.data.isRoot == true && !this.node.data.summaryRoot){
             return false;
         }
         this.node.clearCacheData();
@@ -361,15 +361,15 @@ export class RemoveNodes extends Command {
     entries: { node: INode; parent: INode; index: number }[];
     constructor(nodes: INode[]) {
         super('removeNodes');
-        const roots = selectionRoots(nodes).filter(node => !!node.parent && !node.data.isRoot);
-        this.entries = roots.map(node => ({ node, parent: node.parent, index: node.parent.children.indexOf(node) }));
+        const roots = selectionRoots(nodes).filter(node => (!!node.parent && !node.data.isRoot) || node.data.summaryRoot);
+        this.entries = roots.map(node => ({ node, parent: node.parent, index: node.parent?.children.indexOf(node) ?? -1 }));
         this.mind = roots[0]?.mindmap;
     }
     execute(): boolean {
         if (!this.entries.length) return false;
         this.mind.clearSelectNode();
         this.entries.forEach(({ node }) => this.mind.removeNode(node));
-        this.entries[0].parent.select();
+        (this.entries[0].parent || this.mind.root).select();
         this.refresh();
         return true;
     }

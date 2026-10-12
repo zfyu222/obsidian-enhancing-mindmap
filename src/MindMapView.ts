@@ -13,6 +13,7 @@ import {
 import MindMapPlugin from './main'
 import { FRONT_MATTER_REGEX } from './constants'
 import MindMap from "./mindmap/mindmap";
+import { extractSummaries, prepareMainMarkdown, sourceNodeContent } from './summary/markdown';
 import MindMapToolbar from './MindMapToolbar';
 import { INodeData } from './mindmap/INode'
 import { Transformer } from './markmapLib/markmap-lib';
@@ -82,7 +83,7 @@ export class MindMapView extends TextFileView implements HoverParent {
 
    // this.mindmap.contentEL.style.visibility='hidden';
     var nodes:any[] = [];
-    this.mindmap.traverseDF((n:any)=>{
+    this.mindmap.traverseAll((n:any)=>{
        if(n.isShow()){
          nodes.push(n)
        }
@@ -208,7 +209,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     }
 
     var nodes: any[] = [];
-    this.mindmap.traverseDF((n: any) => {
+    this.mindmap.traverseAll((n: any) => {
       if (n.isShow()) {
         nodes.push(n);
       }
@@ -368,7 +369,8 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.data = data;
 
     var mdText = this.getMdText(this.data);
-    var mindData = this.mdToData(mdText);
+    const summaryDocument = extractSummaries(mdText);
+    var mindData = this.mdToData(summaryDocument.main);
     mindData.isRoot = true;
 
     // const frontmatterContentRegExResult = /^---$(.+?)^---$.+?/mis.exec(data)
@@ -405,6 +407,7 @@ export class MindMapView extends TextFileView implements HoverParent {
           }
         }
         this.mindmap.init();
+        this.mindmap.summaries.load(summaryDocument.entries, summaryDocument.preserved, summaryDocument.raw);
         this.mindmap.refresh();
         this.mindmap.view = this;
         this.toolbar?.update();
@@ -417,6 +420,7 @@ export class MindMapView extends TextFileView implements HoverParent {
 
       this.mindmap.path = view?.file.path;
       this.mindmap.init();
+      this.mindmap.summaries.load(summaryDocument.entries, summaryDocument.preserved, summaryDocument.raw);
       this.mindmap.refresh();
       this.mindmap.view = this;
       this.toolbar?.update();
@@ -491,6 +495,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   }
 
   mdToData(str: string) {
+    const prepared = prepareMainMarkdown(str);
     function transformData(mapData: any) {
       var flag = true;
       if (mapData.t == 'blockquote') {
@@ -498,13 +503,21 @@ export class MindMapView extends TextFileView implements HoverParent {
         flag = false;
         mapData.v = '> ' + mapData.v;
       }
+      // Multiple Markdown lists may remain as structural wrappers in Markmap.
+      const flattenLists = (nodes: any[]): any[] => nodes.reduce((out: any[], node: any) =>
+        out.concat(['bullet_list', 'ordered_list'].includes(node.t) ? flattenLists(node.c || []) : [node]), []);
+      mapData.c = flattenLists(mapData.c || []);
+      const source = sourceNodeContent(mapData, prepared);
+      const marker = { text: source.text, id: source.stableId };
+      mapData.v = marker.text;
       const regexResult = /^(?:.* )?\^([a-z0-9\-]+)$/gim.exec(mapData.v);
-      const id = regexResult != null ? regexResult[1] : null
+      const id = source.foldedId || (!['heading', 'list_item'].includes(mapData.t) && regexResult != null ? regexResult[1] : null)
 
      // console.log(id);
 
       var map: INodeData = {
-        id: id || uuid(),
+        id: marker.id || id || uuid(),
+        summaryMember: !!marker.id,
         text: id ? mapData.v.replace(new RegExp(` ?\\^${id}$`, 'im'), '') : mapData.v,
         children: [],
         expanded: id ? false:true
@@ -520,7 +533,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     }
 
     if (str) {
-      const { root } = transformer.transform(str);
+      const { root } = transformer.transform(prepared.text);
       const data = transformData(root);
       return data;
 

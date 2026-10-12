@@ -75,6 +75,11 @@ export default class Layout {
                 }
             });
         }
+        this.mind?.summaries?.pinSides(root.children, this.direct);
+        root.children.forEach(child => this._setDirect(child, child.direct));
+        this.rights = root.children.filter(n => n.direct === 'right');
+        this.lefts = root.children.filter(n => n.direct === 'left');
+        if (this.direct === 'clockwise') this.lefts.reverse();
     }
 
     _setDirect(n:Node, direct:string) {

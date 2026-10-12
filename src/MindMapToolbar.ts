@@ -9,9 +9,14 @@ export default class MindMapToolbar {
     const map = this.map;
     const ready = !!map.root;
     const roots = ready ? map.getSelectedRoots() : [];
+    if (this.buttons.summary) {
+      const validation = ready ? map.summaries?.validation() : null;
+      this.buttons.summary.disabled = !validation || !!validation.error || !!map.summaries?.preserved;
+      this.buttons.summary.title = (validation?.error ? t(validation.error as any) : t('Add summary'));
+    }
     this.buttons.child.disabled = !ready;
     this.buttons.sibling.disabled = !map.selectNode?.parent;
-    this.buttons.delete.disabled = !roots.some(node => !node.data.isRoot);
+    this.buttons.delete.disabled = !roots.some(node => !node.data.isRoot || node.data.summaryRoot);
     const editor = map.editNode || map.selectNode;
     const draft = !!editor?.data.isEdit && editor.contentEl.textContent !== editor.data.text;
     this.buttons.undo.disabled = !map.exec.history.undos.length && !draft;
@@ -35,6 +40,7 @@ export default class MindMapToolbar {
     });
     // Inline SVG keeps icons available on older Obsidian versions as well.
     const icons: Record<string, string> = {
+      summary: '<path d="M6 3q5 0 5 5v8q0 5-5 5m5-9h4"/><rect x="15" y="8" width="6" height="8" rx="1"/>',
       child: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M7 9v8h5m5-4v8m-4-4h8"/>',
       sibling: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M3 13h8m-4-4v12m10-12v8m-4-4h8"/>',
       delete: '<path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6m4-6v6"/>',
@@ -60,11 +66,12 @@ export default class MindMapToolbar {
         if (!map.root || map.isComposing) return;
         action();
         this.update();
-        map.focusAfterHistory();
+        if (!map.editNode?.data.isEdit) map.focusAfterHistory();
       });
       this.buttons[id] = el;
       this.element.appendChild(el);
     };
+    button('summary', t('Add summary'), t('Add summary'), () => map.summaries?.create());
     button('child', t('Add child'), `${t('Add child')} (Tab)`, () => {
       map.finishEditingForHistory();
       const parent = map.selectNode || map.root;
@@ -80,7 +87,7 @@ export default class MindMapToolbar {
     });
     button('delete', t('Delete nodes'), `${t('Delete nodes')} (Delete)`, () => {
       map.finishEditingForHistory();
-      map.deleteSelectedNodes(map.getSelectedRoots().filter(node => !node.data.isRoot));
+      map.deleteSelectedNodes(map.getSelectedRoots().filter(node => !node.data.isRoot || node.data.summaryRoot));
     });
     button('undo', t('Undo'), t('Undo'), () => map.undo());
     button('redo', t('Redo'), t('Redo'), () => map.redo());

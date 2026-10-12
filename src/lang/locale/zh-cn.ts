@@ -1,6 +1,15 @@
 // 简体中文
 
 export default {
+    "Move within the same tree": "请在同一棵树内移动节点；跨主图与概括子树请使用复制粘贴。",
+    "Select at least one node": "请至少选择一个节点",
+    "Select nodes in the main tree": "请选择主图中的原节点",
+    "Summary members must have the same parent": "概括成员必须具有同一个父节点",
+    "Summary members must be on the same side": "概括成员必须位于 root 的同一侧",
+    "Summary members must be consecutive siblings": "概括成员必须是连续的兄弟节点",
+    "Summary": "概括",
+    "Add summary": "添加概括",
+    "Invalid summary data preserved": "概括数据异常，已保留原文。请修复 Markdown 引用后再编辑概括。",
     "Mind map toolbar": "思维导图工具栏",
     "Add child": "添加子节点",
     "Add sibling": "添加同级节点",

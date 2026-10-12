@@ -249,3 +249,13 @@
   outline-offset: 2px;
 }
 
+
+.mm-node.mm-root.mm-summary-node .mm-node-content {
+  font-size: 1em;
+  padding: 8px 12px;
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
+.mm-summary-bracket { cursor: pointer; pointer-events: stroke; }

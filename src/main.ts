@@ -130,6 +130,10 @@ export default class MindMapPlugin extends Plugin {
       }
     });
 
+    this.addCommand({ id: 'add-summary', name: t('Add summary'), callback: () => {
+      this.app.workspace.getActiveViewOfType(MindMapView)?.mindmap?.summaries?.create();
+    }});
+
     // Alt + Shift + V
     this.addCommand({
       id: 'Paste Node',

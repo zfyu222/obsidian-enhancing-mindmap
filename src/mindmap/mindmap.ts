@@ -1,4 +1,5 @@
 import INode, { INodeData } from './INode'
+import SummaryManager from '../summary/manager'
 import Layout from './Layout'
 import { Notice, Platform } from 'obsidian'
 import SVG from 'svg.js'
@@ -80,6 +81,8 @@ export default class MindMap {
     dispLevel:number;
     isComposing = false;
     isFocused = true;
+    summaries?: SummaryManager;
+    summaryTransaction = false;
 
     constructor(data: INodeData, containerEL: HTMLElement, setting?: Setting) {
         this.setting = Object.assign({
@@ -135,6 +138,7 @@ export default class MindMap {
 
         // link line
         this.edgeGroup = this.draw.group();
+        this.summaries = new SummaryManager(this);
 
         this.appClickFn = this.appClickFn.bind(this);
         this.appDragstart = this.appDragstart.bind(this);
@@ -272,9 +276,14 @@ export default class MindMap {
 
     }
 
+    traverseAll(callback: Function) {
+        this.traverseDF(callback, this.root, true);
+        this.summaries?.all((node: INode) => callback(node));
+    }
+
     getNodeById(id: string) {
         var snode: INode = null;
-        this.traverseDF((n: INode) => {
+        this.traverseAll((n: INode) => {
             if (n.getId() == id) {
                 snode = n;
             }
@@ -290,7 +299,7 @@ export default class MindMap {
     getSelectedRoots(): INode[] {
         const roots = new Set(selectionRoots(this.getSelectedNodes()));
         const ordered: INode[] = [];
-        this.traverseDF((node: INode) => { if (roots.has(node)) ordered.push(node); }, this.root, true);
+        this.traverseAll((node: INode) => { if (roots.has(node)) ordered.push(node); });
         return ordered;
     }
 
@@ -400,19 +409,21 @@ export default class MindMap {
         this._tempNum++;
         //console.log(this._nodeNum,this._tempNum);
 
-        if (this._tempNum == this._nodeNum) {
+        if (this._tempNum >= this._nodeNum) {
             this.refresh();
             //this.center();
         }
     }
 
     renderEditNode(evt: CustomEvent) {
+        if (this.summaryTransaction) return;
         var node = evt.detail.node || null;
         node?.clearCacheData();
         this.refresh();
     }
 
     mindMapChange() {
+        if (this.summaryTransaction) return;
         //console.log(this.view)
         this.view?.mindMapChange();
     }
@@ -483,7 +494,7 @@ export default class MindMap {
             consume();
             node.edit();
             this._menuDom.style.display = 'none';
-        } else if (!editing && (key === 'delete' || key === 'backspace') && !node.data.isRoot) {
+        } else if (!editing && (key === 'delete' || key === 'backspace') && (!node.data.isRoot || node.data.summaryRoot)) {
             consume();
             this.deleteSelectedNodes();
         }
@@ -1746,7 +1757,7 @@ export default class MindMap {
             const dropNode = this.getNodeById(element.getAttribute('data-id'));
             if (!this._dragNodes.some(root => containsNode(root, dropNode))) {
                 if (evt.ctrlKey || evt.metaKey) {
-                    this.pasteNode(serializeForest(this._dragNodes), dropNode);
+                    this.pasteNode(this.copyForest(this._dragNodes), dropNode);
                 } else {
                     const type = this._getDragType(dropNode, evt.clientX, evt.clientY);
                     this.execute('moveNodes', { nodes: this._dragNodes, dropNode, type });
@@ -1838,10 +1849,10 @@ export default class MindMap {
             }
             Object.assign(this._selectionOverlay.style, { display: 'block', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.right - rect.left}px`, height: `${rect.bottom - rect.top}px` });
             const selected: INode[] = [];
-            this.traverseDF((node: INode) => {
+            this.traverseAll((node: INode) => {
                 const box = node.containEl.getBoundingClientRect();
                 if (node.isShow() && intersectsRect(bounds, box) && intersectsRect(rect, box)) selected.push(node);
-            }, this.root, true);
+            });
             this.setSelectedNodes([...this._selectionBase, ...selected], undefined, false);
             return;
         }
@@ -1978,6 +1989,7 @@ export default class MindMap {
     }
 
     clear() {
+        this.summaries?.clear();
         this.clearNode();
         this.removeEvent();
         this.draw?.clear();
@@ -2193,6 +2205,7 @@ export default class MindMap {
     }
 
     removeNode(node: INode) {
+        if (node.data.summaryRoot) return this.summaries.removeRoot(node);
         if (node.parent) {
             var p = node.parent;
             var i = node.parent.removeChild(node);
@@ -2229,7 +2242,9 @@ export default class MindMap {
     }
 
     refresh() {
+        if (this.summaryTransaction) return;
         this.layout();
+        this.summaries?.layout();
     }
 
     emit(name: string, data?: any) {
@@ -2425,65 +2440,31 @@ export default class MindMap {
     }
 
     getMarkdown() {
-        var md = '';
-        var level = this.setting.headLevel;
-        this.traverseDF((n: INode) => {
-            var l = n.getLevel() + 1;
-            var hPrefix = '', space = '';
-            if (l > 1) {
-                hPrefix = '\n';
-            }
-            const ending = n.isExpand ? '' : ` ^${n.getId()}`
-            if (n.getLevel() < level) {
-                for (let i = 0; i < l; i++) {
-                    hPrefix += '#';
-                }
-                md += (hPrefix + ' ');
-                md += n.getData().text.trim() + ending + '\n';
-
+        const lines: string[] = [];
+        const level = this.setting.headLevel;
+        this.traverseDF((node: INode) => {
+            const text: string = node.data.text.trim();
+            const parts = text.split('\n');
+            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + (node.data.summaryMember ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
+            if (node.getLevel() < level) {
+                const block = /^(```|~~~|\|)/.test(text);
+                lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);
+                if (block) lines.push('');
+                lines.push(...parts);
             } else {
-                for (var i = 0; i < n.getLevel() - level; i++) {
-                    space += '\t';
-                }
-                var text = n.getData().text.trim();
-                if (text) {
-                    var textArr = text.split('\n');
-                    var lineLength = textArr.length;
-
-                    if (lineLength == 1) {
-                        md += `${space}- ${text}${ending}\n`;
-                    } else if (lineLength > 1) {
-                        //code
-                        if (text.startsWith('```')) {
-                            md+='\n'
-                            md += `${space}-\n`;
-                            textArr.forEach((t: string, i: number) => {
-                                md += `${space}  ${t.trim()}${i === textArr.length - 1 ? ending : '' }\n`
-                            });
-                            md+='\n'
-                        } else {
-                            //text
-                            md += `${space}- `;
-                            textArr.forEach((t: string, i: number) => {
-                                var contentText = "void";
-                                if(t.trim().length > 0){
-                                    contentText = t.trim();
-                                }
-                                if (i > 0) {
-                                    md += `${space}${contentText}${i === textArr.length - 1 ? ending : '' }\n`
-                                } else {
-                                    md += `${contentText}\n`
-                                }
-                            });
-                        }
-
-                    }
+                const indent = '\t'.repeat(node.getLevel()-level);
+                // Metadata belongs on the structural list line, outside code fences/tables.
+                if (/^(```|~~~|\|)/.test(text)) {
+                    lines.push('', `${indent}-${ending}`);
+                    parts.forEach(part => lines.push(`${indent}  ${part}`));
+                    lines.push('');
                 } else {
-                    md += `${space}-${ending}\n`;
+                    lines.push(`${indent}-` + (text ? ' ' + (parts.shift() || '') : '') + ending);
+                    if (text) parts.forEach(part => lines.push(`${indent}  ${part}`));
                 }
             }
         }, this.root, true);
-        return md.trim();
+        return [lines.join('\n').trim(), this.summaries?.markdown()].filter(Boolean).join('\n\n');
     }
     scale(num: number) {
         if (num < 20) {
@@ -2520,15 +2501,17 @@ export default class MindMap {
         }, 600);
     }
 
+    copyForest(nodes: INode[]): string { return serializeForest(nodes, this.summaries?.data()); }
+
     copyNode(node?: INode): string {
-        return node ? serializeSubtree(node) : serializeForest(this.getSelectedRoots());
+        return this.copyForest(node ? [node] : this.getSelectedRoots());
     }
 
     async cutSelectedNodes(): Promise<void> {
         const nodes = this.getSelectedRoots();
-        if (!nodes.length || nodes.some(node => !node.parent || node.data.isEdit) || this.editNode?.data.isEdit) return;
+        if (!nodes.length || nodes.some(node => (!node.parent && !node.data.summaryRoot) || node.data.isEdit) || this.editNode?.data.isEdit) return;
         try {
-            await navigator.clipboard.writeText(serializeForest(nodes));
+            await navigator.clipboard.writeText(this.copyForest(nodes));
             if (nodes.every(node => this.getNodeById(node.getId()) === node && !node.data.isEdit)) this.deleteSelectedNodes(nodes);
         } catch (_) {
             new Notice('Unable to cut mind map nodes to the clipboard.');

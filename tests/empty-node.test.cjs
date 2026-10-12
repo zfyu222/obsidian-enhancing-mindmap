@@ -23,7 +23,7 @@ const commands = load('src/mindmap/Cmds.ts');
 const { default: History } = load('src/mindmap/History.ts');
 const { default: MindMap } = load('src/mindmap/mindmap.ts');
 const { MindMapView } = load('src/MindMapView.ts', {
-    obsidian, './markmapLib/markmap-lib': parser
+    obsidian, './markmapLib/markmap-lib': parser, './summary/markdown': load('src/summary/markdown.ts')
 });
 function node(text, parent = null, expanded = true) {
     const n = Object.create(Node.prototype);

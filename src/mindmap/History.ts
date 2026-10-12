@@ -10,7 +10,10 @@ class History {
         this.limit = limit || 50;     
     }
 
+    decorate?: (command: any) => any;
+
     execute(command:Command) {
+        if (this.decorate) command = this.decorate(command);
         if (command.execute()){
             this.clearRedo();
             var length = this.undos.length;

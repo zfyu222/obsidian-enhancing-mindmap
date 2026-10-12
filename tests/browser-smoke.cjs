@@ -9,11 +9,12 @@ fs.mkdirSync(screenshotDir, { recursive: true });
 const source = ts.createSourceFile('main.js', fs.readFileSync(`${repo}/main.js`, 'utf8'), ts.ScriptTarget.Latest, true);
 const definitions = new Map();
 function visit(node) {
+    if (ts.isVariableDeclaration(node) && ['START','END'].includes(node.name.getText(source))) definitions.set(node.name.getText(source), 'const ' + node.getText(source) + ';');
     if ((ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node)) && node.name) definitions.set(node.name.text, node.getText(source));
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar'];
+const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -46,7 +47,12 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
                 select(preserve){ProdNode.prototype.select.call(this,preserve)} unSelect(){ProdNode.prototype.unSelect.call(this)}
                 getBox(){return {x:parseFloat(this.containEl.style.left),y:parseFloat(this.containEl.style.top),width:this.containEl.offsetWidth,height:this.containEl.offsetHeight}}
-                isShow(){return !this.isHide} clearCacheData(){} refreshBox(){} setPosition(){} expand(){this.isExpand=true} collapse(){this.isExpand=false}
+                isShow(){return !this.isHide} clearCacheData(){} refreshBox(){}
+                setPosition(x,y){this.containEl.style.left=x+'px';this.containEl.style.top=y+'px'}
+                show(){this.isHide=false;this.containEl.style.display='block'} hide(){this.isHide=true;this.containEl.style.display='none'}
+                expand(){ProdNode.prototype.expand.call(this)} collapse(){ProdNode.prototype.collapse.call(this)}
+                getLevel(){return ProdNode.prototype.getLevel.call(this)}
+                addChild(n,index=-1){ProdNode.prototype.addChild.call(this,n,index)} removeChild(n){return ProdNode.prototype.removeChild.call(this,n)}
             }
             const Node$1 = Node;
             const Notice = class { constructor(text) { console.error(text); } };
@@ -57,7 +63,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             document.querySelector('#map').tabIndex=-1;
             Object.assign(map,{appEl:document.querySelector('#map'),containerEL:document.querySelector('#viewport'),selectedNodes:[],isFocused:true,_dragNodes:[],_selectionBase:[],_menuDom:{style:{}},_indicateDom:document.createElement('div'),_suppressClickUntil:0,exec:new Exec(),_panning:false});
             map.view={app:{workspace:{getActiveViewOfType:()=>map.view}}};
-            map.addNode=(node,parent,index=-1)=>{parent.children.splice(index<0?parent.children.length:index,0,node);node.parent=parent;map.appEl.append(node.containEl)};
+            map.addNode=(node,parent,index=-1)=>{if(!parent)return;parent.children.splice(index<0?parent.children.length:index,0,node);node.parent=parent;map.appEl.append(node.containEl)};
             map.removeNode=node=>{const i=node.parent.children.indexOf(node);node.parent.children.splice(i,1);const remove=n=>{n.containEl.remove();n.children.forEach(remove)};remove(node);return i};
             map.emit=()=>{};
             const make=(id,parent,x,y)=>{const node=new Node({id,text:id},map);node.containEl.style.left=x+'px';node.containEl.style.top=y+'px';if(parent)map.addNode(node,parent);else map.appEl.append(node.containEl);return node};
@@ -78,6 +84,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
+            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,extractSummaries});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -288,6 +295,106 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.deepEqual(errors, []);
         console.log('Fixed toolbar: add child/sibling, draft undo/redo, batch delete, root protection, zoom limits, fixed position, narrow viewport and recreation passed.');
         assert.deepEqual(errors, []);
+        await page.setViewportSize({width:1600,height:900});
+        await page.evaluate(() => {
+            toolbar.destroy();
+            document.querySelectorAll('.mm-view').forEach(host=>host.style.cssText='height:760px;width:1550px;margin:0');
+            testMap.containerEL.style.cssText='margin:0;width:auto;height:auto;border:0';
+            testMap.appEl.style.cssText='width:5000px;height:2500px;position:relative';
+            testMap.appEl.style.transform='';
+            testMap.setting.headLevel=1;
+            testMap.finishEditingForHistory();
+            testMap.exec.history.clear();
+            const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+            svg.style.cssText='position:absolute;width:5000px;height:2500px;pointer-events:none'; testMap.appEl.prepend(svg);
+            const group=()=>{const el=document.createElementNS(svg.namespaceURI,'g');svg.append(el);return {clear(){el.replaceChildren()},group,
+                path(d){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);el.append(path);return {node:path,fill(v){path.setAttribute('fill',v);return this},stroke(v){path.setAttribute('stroke','#8f9baa');path.setAttribute('stroke-width',v.width);return this},addClass(v){path.classList.add(v);path.style.pointerEvents='stroke';return this}}}}};
+            testMap.edgeGroup={group};testMap.contentEL=testMap.appEl;
+            testMap.summaries=new SummaryManager(testMap);
+            const [a,b,c]=[testNodes.a,testNodes.b,testNodes.target];
+            testMap.root.children=[a,b,c];
+            [a,b,c].forEach((n,i)=>{n.data.id='member-'+i;n.containEl.setAttribute('data-id',n.data.id);testMap.traverseDF(child=>{if(child!==n){child.data.id='descendant-'+i+'-'+child.data.id.replace(/[^a-z0-9-]/gi,'');child.containEl.setAttribute('data-id',child.data.id)}},n);n.parent=testMap.root;n.direct='right';n.data.summaryTree=null;n.setPosition(230,100+i*180);n.children.forEach(child=>child.setPosition(420,100+i*180));});
+            testMap.root.setPosition(40,280);
+            testMap.refresh=()=>testMap.summaries.layout();
+            testMap.removeNode=MindMap.prototype.removeNode;
+            window.toolbar=new MindMapToolbar(testMap,document.querySelector('.mm-view'));
+            testMap.setSelectedNodes([a]);
+        });
+        await tool('summary').click();
+        assert.equal(await page.evaluate(() => testMap.summaries.items.length), 1);
+        assert.equal(await page.evaluate(() => testMap.editNode?.data.summaryRoot), true);
+        await page.keyboard.type('单节点概括');
+        await page.keyboard.press('Tab');
+        await page.keyboard.press('Tab');
+        await page.waitForFunction(()=>testMap.editNode?.parent?.data.summaryRoot);
+        await page.keyboard.type('独立子树内容');
+        await page.evaluate(()=>{testMap.finishEditingForHistory();testMap.setSelectedNodes([testNodes.a,testNodes.b]);});
+        await tool('summary').click();
+        await page.keyboard.type('A+B 概括');
+        await page.evaluate(()=>{testMap.finishEditingForHistory();testMap.setSelectedNodes([testNodes.b,testNodes.target]);});
+        await tool('summary').click();
+        await page.keyboard.type('B+C 概括');
+        await page.evaluate(()=>{testMap.finishEditingForHistory();testMap.setSelectedNodes([testNodes.a,testNodes.b,testNodes.target]);});
+        await tool('summary').click(); await page.keyboard.type('A+B+C 概括');
+        await page.evaluate(()=>testMap.finishEditingForHistory());
+        assert.equal(await page.locator('.mm-summary-bracket').count(),4);
+        const saved=await page.evaluate(()=>testMap.getMarkdown());
+        assert.ok(saved.includes('mm:node'));assert.ok(saved.includes('独立子树内容'));
+        assert.equal(await page.evaluate(()=>extractSummaries(testMap.getMarkdown()).entries.length),4);
+        const boxes=await page.evaluate(()=>testMap.summaries.items.map(s=>{const nodes=[];testMap.traverseDF(n=>{if(n.isShow())nodes.push(n)},s.root);return testMap.getBoundingRect(nodes)}));
+        for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++)assert.ok(boxes[i].right<=boxes[j].x || boxes[j].right<=boxes[i].x || boxes[i].bottom<=boxes[j].y || boxes[j].bottom<=boxes[i].y,'Summary subtrees must not collide');
+        await page.screenshot({path:path.join(screenshotDir,'summaries.png')});
+        await page.evaluate(()=>{
+            const parsed=extractSummaries(testMap.getMarkdown());
+            testMap.summaries.load(parsed.entries,parsed.preserved,parsed.raw);testMap.refresh();
+        });
+        assert.equal(await page.locator('.mm-summary-bracket').count(),4);
+        assert.ok(await page.evaluate(()=>testMap.summaries.items[0].root.children.some(n=>n.data.text==='独立子树内容')));
+        await page.evaluate(()=>{
+            testMap.root.setPosition(2100,280);
+            [testNodes.a,testNodes.b,testNodes.target].forEach((n,i)=>{n.direct='left';n.setPosition(1700,100+i*180);n.children.forEach(child=>child.setPosition(1500,100+i*180));});
+            testMap.refresh();
+        });
+        const leftBounds=await page.evaluate(()=>testMap.summaries.items.map(s=>s.root.getBox()));
+        assert.ok(leftBounds.every(b=>b.x<1500));
+        await page.screenshot({path:path.join(screenshotDir,'summaries-left.png')});
+
+        await page.evaluate(()=>{testMap.root.collapse();testMap.refresh();});
+        assert.equal(await page.locator('.mm-summary-bracket').count(),0);
+        assert.equal(await page.evaluate(()=>testMap.summaries.items.every(s=>!s.root.isShow())),true);
+        await page.evaluate(()=>{testMap.root.expand();testMap.refresh();});
+        assert.equal(await page.locator('.mm-summary-bracket').count(),4);
+        // A member's collapsed descendants shrink its brace without changing membership.
+        const foldedRange = await page.evaluate(()=>{
+            const member=testNodes.b, child=member.children[0]; child.setPosition(1500,760); testMap.refresh();
+            const id=testMap.summaries.items.find(s=>s.memberIds.length===2 && s.memberIds.includes(member.getId())).id;
+            const brace=()=>document.querySelector(`[data-summary-id="${id}"]`).getAttribute('d');
+            const before=brace(); member.collapse();testMap.refresh();const after=brace();
+            const members=testMap.summaries.items.find(s=>s.id===id).memberIds.length;
+            member.expand();child.setPosition(1500,280);testMap.refresh();return {before,after,members};
+        });
+        assert.notEqual(foldedRange.before,foldedRange.after);assert.equal(foldedRange.members,2);
+        // Complete/partial copy and reference remapping.
+        await page.evaluate(()=>testMap.setSelectedNodes([testNodes.a,testNodes.b,testNodes.target]));
+        const clipboard=await page.evaluate(()=>testMap.copyNode());
+        assert.equal(JSON.parse(clipboard).summaries.length,4);
+        await page.evaluate(text=>{testMap.setSelectedNodes([testNodes.target]);testMap.pasteNode(text,testNodes.target)},clipboard);
+        assert.equal(await page.evaluate(()=>testMap.summaries.items.length),8);
+        await tool('undo').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),4);
+        await tool('redo').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),8);
+        await tool('undo').click();
+        // Delete all members removes every dependent subtree in one history step.
+        await page.evaluate(()=>testMap.setSelectedNodes([testNodes.a,testNodes.b,testNodes.target]));
+        await tool('delete').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),0);
+        await tool('undo').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),4);
+        assert.ok(await page.evaluate(()=>testMap.getMarkdown().includes('独立子树内容')));
+        await page.evaluate(()=>testMap.setSelectedNodes(testMap.summaries.items.map(s=>s.root)));
+        await tool('delete').click();
+        assert.equal(await page.evaluate(()=>testMap.summaries.items.length),0);
+        assert.equal(await page.evaluate(()=>testMap.getMarkdown().includes('mm:node')),false);
+        await tool('undo').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),4);
+        assert.deepEqual(errors,[]);
+        console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });
