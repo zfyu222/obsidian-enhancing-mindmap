@@ -127,6 +127,7 @@ const globalMap = Object.create(MindMap.prototype);
 globalMap.view = { app: { workspace: { getActiveViewOfType: () => globalMap.view } } };
 globalMap.containerEL = { contains: () => false }; globalMap.isFocused = false;
 globalMap.appEl = { focus() {} }; globalMap.selectedNodes = [];
+globalMap.emit = () => {}; // DOM notifications are covered by browser-smoke.
 const historyCalls = [];
 globalMap.editNode = { data: { isEdit: true }, cancelEdit() { historyCalls.push('commit'); this.data.isEdit = false; } };
 globalMap.exec = { undo() { historyCalls.push('undo'); }, redo() { historyCalls.push('redo'); } };

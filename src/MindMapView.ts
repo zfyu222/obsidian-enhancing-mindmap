@@ -13,6 +13,7 @@ import {
 import MindMapPlugin from './main'
 import { FRONT_MATTER_REGEX } from './constants'
 import MindMap from "./mindmap/mindmap";
+import MindMapToolbar from './MindMapToolbar';
 import { INodeData } from './mindmap/INode'
 import { Transformer } from './markmapLib/markmap-lib';
 import randomColor from "randomcolor";
@@ -38,6 +39,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   hoverPopover: HoverPopover | null;
   id: string = (this.leaf as any).id;
   mindmap: MindMap | null;
+  toolbar: MindMapToolbar | null;
   colors: string[] = [];
   timeOut: any = null;
   fileCache: any;
@@ -333,6 +335,8 @@ export class MindMapView extends TextFileView implements HoverParent {
 
 
   async onClose() {
+    this.toolbar?.destroy();
+    this.toolbar = null;
     // Remove draggables from render, as the DOM has already detached
     //this.plugin.removeView(this);
     if (this.mindmap) {
@@ -353,6 +357,8 @@ export class MindMapView extends TextFileView implements HoverParent {
   }
 
   setViewData(data: string) {
+    this.toolbar?.destroy();
+    this.toolbar = null;
 
     if (this.mindmap) {
       this.mindmap.clear();
@@ -377,7 +383,13 @@ export class MindMapView extends TextFileView implements HoverParent {
     //   });
     // }
 
-    this.mindmap = new MindMap(mindData, this.contentEl, this.plugin.settings);
+    this.contentEl.innerHTML = '';
+    this.contentEl.classList.add('mm-view');
+    const viewport = document.createElement('div');
+    viewport.className = 'mm-viewport';
+    this.contentEl.appendChild(viewport);
+    this.mindmap = new MindMap(mindData, viewport, this.plugin.settings);
+    this.toolbar = new MindMapToolbar(this.mindmap, this.contentEl);
     this.mindmap.colors = this.colors;
     if (this.firstInit) {
 
@@ -395,6 +407,7 @@ export class MindMapView extends TextFileView implements HoverParent {
         this.mindmap.init();
         this.mindmap.refresh();
         this.mindmap.view = this;
+        this.toolbar?.update();
         this.firstInit = false;
       }, 100);
     } else {
@@ -406,10 +419,13 @@ export class MindMapView extends TextFileView implements HoverParent {
       this.mindmap.init();
       this.mindmap.refresh();
       this.mindmap.view = this;
+      this.toolbar?.update();
     }
   }
 
   onunload() {
+    this.toolbar?.destroy();
+    this.toolbar = null;
     this.app.workspace.offref("quick-preview");
     this.app.workspace.offref("resize");
 

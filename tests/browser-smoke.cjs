@@ -13,7 +13,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
+const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -78,6 +78,15 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
+            window.installToolbar=()=>{
+                const host=document.createElement('div');host.className='view-content mm-view';
+                host.style.cssText='height:480px;width:1050px;margin:16px';
+                map.containerEL.before(host);host.append(map.containerEL);
+                map.containerEL.className='mm-viewport';map.containerEL.style.cssText='margin:0;width:auto;height:auto;border:0';
+                map.emit=MindMap.prototype.emit;
+                map.mindScale=100;map.scalePointer=[];map.setting={canvasSize:1200};
+                window.toolbar=new MindMapToolbar(map,host);
+            };
             window.snapshot=()=>({selected:map.getSelectedNodes().map(n=>n.getId()),roots:map.getSelectedRoots().map(n=>n.getId()),children:map.root.children.map(n=>n.getId()),target:target.children.map(n=>n.getId()),scroll:[map.containerEL.scrollLeft,map.containerEL.scrollTop],undos:map.exec.history.undos.length});
         })();` });
         assert.deepEqual(errors, [], 'Harness initialization errors');
@@ -217,6 +226,51 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(() => testMap.editNode), null);
         await page.keyboard.press('Control+Shift+z');
         assert.equal(await page.evaluate(() => testNodes.target.data.text), 'Changed in editor');
+        // Fixed toolbar uses production bundle controls and graph history.
+        await page.evaluate(() => { installToolbar(); testMap.setSelectedNodes([testNodes.b]); });
+        const tool = action => page.locator('.mm-toolbar button[data-action="' + action + '"]');
+        await tool('child').click();
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 1);
+        await page.keyboard.type('Toolbar draft');
+        await tool('undo').click();
+        assert.equal(await page.evaluate(() => testNodes.b.children[0].data.text), 'Sub title');
+        await tool('undo').click();
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        await tool('redo').click();
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        await tool('sibling').click();
+        await page.waitForFunction(() => testNodes.b.children.length === 2 && testMap.editNode?.data.isEdit);
+        await page.evaluate(() => { testMap.finishEditingForHistory(); testMap.setSelectedNodes(testNodes.b.children); });
+        await tool('delete').click();
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        await tool('undo').click();
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 2);
+        await page.evaluate(() => testMap.setSelectedNodes([testMap.root]));
+        assert.equal(await tool('sibling').isDisabled(), true);
+        assert.equal(await tool('delete').isDisabled(), true);
+        const before = await page.locator('.mm-toolbar').boundingBox();
+        await tool('zoomIn').click();
+        assert.equal(await tool('reset').innerText(), '110%');
+        await page.evaluate(() => { testMap.containerEL.scrollLeft=100; testMap.containerEL.scrollTop=100; });
+        assert.deepEqual(await page.locator('.mm-toolbar').boundingBox(), before);
+        await tool('reset').click();
+        assert.equal(await tool('reset').innerText(), '100%');
+        await page.evaluate(() => testMap.scale(20));
+        assert.equal(await tool('zoomOut').isDisabled(), true);
+        await page.evaluate(() => testMap.scale(300));
+        assert.equal(await tool('zoomIn').isDisabled(), true);
+        await tool('reset').click();
+        await tool('center').click();
+        assert.deepEqual(await page.locator('.mm-toolbar').boundingBox(), before);
+        await page.screenshot({ path: path.join(screenshotDir, 'toolbar.png') });
+        await page.setViewportSize({width:400,height:620});
+        await page.evaluate(() => document.querySelector('.mm-view').style.width='360px');
+        assert.equal(await page.evaluate(() => toolbar.element.scrollWidth > toolbar.element.clientWidth), true);
+        await page.evaluate(() => { toolbar.destroy(); installToolbar(); });
+        assert.equal(await page.locator('.mm-toolbar').count(), 1);
+        assert.deepEqual(errors, []);
+        console.log('Fixed toolbar: add child/sibling, draft undo/redo, batch delete, root protection, zoom limits, fixed position, narrow viewport and recreation passed.');
         assert.deepEqual(errors, []);
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
     } finally { await browser.close(); }

@@ -1,6 +1,16 @@
 // 简体中文
 
 export default {
+    "Mind map toolbar": "思维导图工具栏",
+    "Add child": "添加子节点",
+    "Add sibling": "添加同级节点",
+    "Delete nodes": "删除节点",
+    "Zoom out": "缩小",
+    "Zoom in": "放大",
+    "Reset zoom": "恢复缩放",
+    "Center map": "回到中心",
+    "Undo": "撤销",
+    "Redo": "重做",
   // main.ts
   "Open as mindmap board": "打开为思维导图",
   "Create new mindmap": "创建新思维导图",

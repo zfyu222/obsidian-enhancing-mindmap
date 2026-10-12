@@ -306,6 +306,7 @@ export default class MindMap {
             node.containEl.classList.add('mm-node-select');
         });
         if (focus && this.selectNode) this.selectNode.select(true);
+        this.emit('toolbarChange');
     }
 
     clearSelectNode() {
@@ -315,6 +316,7 @@ export default class MindMap {
         this.selectNode = null;
         if (this.editNode?.data.isEdit) this.editNode.cancelEdit();
         this.editNode = null;
+        this.emit('toolbarChange');
     }
 
     deleteSelectedNodes(nodes = this.getSelectedRoots()) {
@@ -2122,7 +2124,9 @@ export default class MindMap {
 
     //execute cmd , store history
     execute(name: string, data?: any) {
-        return this.exec.execute(name, data);
+        const result = this.exec.execute(name, data);
+        this.emit('toolbarChange');
+        return result;
     }
     finishEditingForHistory() {
         const editor = this.editNode || (this.selectNode?.data.isEdit ? this.selectNode : null);
@@ -2138,6 +2142,7 @@ export default class MindMap {
     undo() {
         this.finishEditingForHistory();
         this.exec.undo();
+        this.emit('toolbarChange');
         this.focusAfterHistory();
         console.log("Undo");
     }
@@ -2145,6 +2150,7 @@ export default class MindMap {
     redo() {
         this.finishEditingForHistory();
         this.exec.redo();
+        this.emit('toolbarChange');
         this.focusAfterHistory();
         console.log("Redo");
     }
@@ -2469,6 +2475,7 @@ export default class MindMap {
             num = 300;
         }
         this.mindScale = num;
+        this.emit('toolbarChange');
         if (this.scalePointer.length) {
             this.appEl.style.transformOrigin = `${this.scalePointer[0]}px ${this.scalePointer[1]}px`;
             this.appEl.style.transform = "scale(" + this.mindScale / 100 + ")";

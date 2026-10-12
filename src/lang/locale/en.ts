@@ -1,6 +1,12 @@
 // English
 
 export default {
+    "Mind map toolbar": "Mind map toolbar",
+    "Add child": "Add child",
+    "Add sibling": "Add sibling",
+    "Delete nodes": "Delete nodes",
+    "Reset zoom": "Reset zoom",
+    "Center map": "Center map",
     // main.ts
     "Open as mindmap board": "Open as mindmap board",
     "Create new mindmap": "Create new mindmap",
