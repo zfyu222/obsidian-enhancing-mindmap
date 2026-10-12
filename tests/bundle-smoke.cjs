@@ -78,7 +78,7 @@ const ActualNode = vm.runInNewContext(`${declarations.get('__awaiter')}\nconst A
 const empty = Object.create(ActualNode.prototype);
 empty.data = { text: 'Before' }; empty._oldText = 'Before';
 empty.contentEl = { innerText: '', innerHTML: '', setAttribute() {} };
-empty.containEl = { classList: { contains: () => false } };
+empty.containEl = { setAttribute() {}, classList: { contains: () => false } };
 empty.refreshBox = () => {}; empty._delay = () => {};
 empty.mindmap = { emit() {}, execute(command, data) {
     assert.equal(command, 'changeNodeText'); assert.equal(data.text, '');
@@ -86,6 +86,14 @@ empty.mindmap = { emit() {}, execute(command, data) {
 empty.cancelEdit(); assert.equal(empty.data.text, '');
 empty.parseText(); assert.equal(empty.data.text, '');
 console.log('Release bundle empty-node edit, rendering and parser cleanup checks passed.');
+const editorTarget = {};
+empty.data.isEdit = true; empty.contentEl.contains = target => target === editorTarget;
+map.editNode = empty;
+const editorClick = { target: editorTarget, preventDefault() { throw Error('Editor click must remain native'); } };
+map.appClickFn(editorClick); map.appDblclickFn(editorClick); map.appDragstart(editorClick);
+assert.equal(empty.data.isEdit, true);
+console.log('Release bundle editor click/double-click/drag routing checks passed.');
+
 
 (async () => {
     const pasteMap = Object.create(MindMap.prototype);

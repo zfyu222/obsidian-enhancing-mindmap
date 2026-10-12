@@ -503,3 +503,25 @@ test('native paste event creates nodes only inside active map and outside text e
     map.appPaste({ ...event, defaultPrevented: false, target: { closest: () => ({}) } }); assert.equal(called, 1);
     map.root.data.isEdit = true; map.appPaste({ ...event, defaultPrevented: false }); assert.equal(called, 1);
 });
+
+
+test('click/double-click inside the current editor leave native caret and text selection untouched', () => {
+    const map = keyboardFixture(); const n = map.root; const inner = {};
+    n.data.isEdit = true; map.editNode = n; n.contentEl = { contains: target => target === inner };
+    map.setSelectedNodes = () => { throw Error('Editor must not be reselected'); };
+    map._suppressClickUntil = Date.now() + 100;
+    const event = { target: inner, ctrlKey: true, shiftKey: true, preventDefault() { throw Error('Native editor input must not be blocked'); } };
+    map.appClickFn(event); map.appDblclickFn(event); map.appDragstart(event);
+    assert.equal(n.data.isEdit, true); assert.equal(map.editNode, n);
+    assert.equal(map._selectionStart, undefined);
+});
+
+test('clicking another node commits the previous editor once and selects the destination', () => {
+    const map = keyboardFixture(); const edited = map.root; const other = add(map, map.root, 'Other');
+    edited.data.isEdit = true; edited.contentEl = { contains: () => false }; map.editNode = edited;
+    let commits = 0; edited.cancelEdit = () => { edited.data.isEdit = false; commits++; };
+    const element = { getAttribute: () => other.getId() };
+    const target = { tagName: 'DIV', hasClass: () => false, closest: selector => selector === '.mm-node' ? element : null };
+    map.appClickFn({ target });
+    assert.equal(commits, 1); assert.equal(map.editNode, null); assert.equal(map.selectNode, other);
+});

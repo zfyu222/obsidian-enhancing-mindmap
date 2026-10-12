@@ -13,7 +13,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
+const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -28,7 +28,9 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
           #status{margin:16px}</style><h3>Mind map batch selection — release bundle test harness</h3><div id="viewport"><div id="map"></div></div><div id="status"></div>`);
         await page.addScriptTag({ content: `(() => {
             ${code}
-            const cmd = { RemoveNodes, MoveNodes, PasteNode };
+            const cmd = { ChangeNodeText, RemoveNodes, MoveNodes, PasteNode };
+            const t = text => text;
+            const obsidian = { MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
             const MindMapView = class {};
             const ProdNode = ${Array.from(definitions.values()).find(text => text.includes('select(preserveSelection = false)'))};
             class Node {
@@ -38,6 +40,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                     this.containEl.setAttribute('data-id',data.id);this.containEl.tabIndex=-1;
                     this.contentEl=document.createElement('div');this.contentEl.className='mm-node-content';this.contentEl.textContent=data.text;this.containEl.append(this.contentEl);
                 }
+                edit(){ProdNode.prototype.edit.call(this)} cancelEdit(){ProdNode.prototype.cancelEdit.call(this)}
+                setText(text){ProdNode.prototype.setText.call(this,text)} parseText(){ProdNode.prototype.parseText.call(this)} _delay(){}
                 getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
                 select(preserve){ProdNode.prototype.select.call(this,preserve)} unSelect(){ProdNode.prototype.unSelect.call(this)}
                 getBox(){return {x:parseFloat(this.containEl.style.left),y:parseFloat(this.containEl.style.top),width:this.containEl.offsetWidth,height:this.containEl.offsetHeight}}
@@ -60,6 +64,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.setSelectedNodes([map.root]);
             map.appEl.addEventListener('mousedown',e=>map.appMouseDown(e));
             map.appEl.addEventListener('click',e=>map.appClickFn(e));
+            map.appEl.addEventListener('dblclick',e=>map.appDblclickFn(e));
             map.appEl.addEventListener('dragstart',e=>map.appDragstart(e));
             map.appEl.addEventListener('dragover',e=>map.appDragover(e));
             map.appEl.addEventListener('drop',e=>map.appDrop(e));
@@ -142,7 +147,33 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.deepEqual(await page.evaluate(() => testNodes.target.children.map(n => n.data.text)), ['Native paste', '![[Assets/pasted.png]]']);
         await page.keyboard.press('Control+z');
         assert.equal((await page.evaluate(() => snapshot())).target.length, 0);
+        await page.evaluate(() => {
+            const node = testNodes.target; node.data.text = 'Alpha beta gamma'; node.contentEl.textContent = node.data.text;
+        });
+        await page.locator('[data-id="Target"] .mm-node-content').dblclick();
+        assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
+        assert.equal(await page.locator('[data-id="Target"]').getAttribute('draggable'), 'false');
+        const caretPoint = await page.evaluate(() => {
+            const range = document.createRange(); const text = testNodes.target.contentEl.firstChild;
+            range.setStart(text, 0); range.setEnd(text, 6); const box = range.getBoundingClientRect();
+            return { x: box.right, y: (box.top + box.bottom) / 2 };
+        });
+        await page.mouse.click(caretPoint.x, caretPoint.y);
+        const caret = await page.evaluate(() => ({ offset: getSelection().anchorOffset, focused: document.activeElement === testNodes.target.contentEl, editing: testNodes.target.data.isEdit }));
+        assert.equal(caret.focused, true); assert.equal(caret.editing, true);
+        assert.ok(caret.offset > 0 && caret.offset < 'Alpha beta gamma'.length);
+        await page.keyboard.type('X');
+        const updated = 'Alpha beta gamma'.slice(0, caret.offset) + 'X' + 'Alpha beta gamma'.slice(caret.offset);
+        assert.equal(await page.locator('[data-id="Target"] .mm-node-content').innerText(), updated);
+        await page.locator('[data-id="Target"] .mm-node-content').dblclick();
+        assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
+        assert.ok((await page.evaluate(() => getSelection().toString())).length > 0);
+        await page.locator('[data-id="Branch B"]').click();
+        assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), false);
+        assert.equal(await page.evaluate(() => testNodes.target.data.text), updated);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.target.data.text), 'Alpha beta gamma');
         assert.deepEqual(errors, []);
-        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste and Ctrl+Z passed.');
+        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection and Ctrl+Z passed.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

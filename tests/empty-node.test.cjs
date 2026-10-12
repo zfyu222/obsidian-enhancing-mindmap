@@ -29,7 +29,7 @@ function node(text, parent = null, expanded = true) {
     const n = Object.create(Node.prototype);
     Object.assign(n, { data: { id: `id-${++serial}`, text, isRoot: !parent },
         parent, children: [], isExpand: expanded, contentEl: { innerHTML: '', innerText: '', setAttribute() {} },
-        containEl: { classList: { contains: () => false } }, refreshBox() {}, _delay() {} });
+        containEl: { setAttribute() {}, classList: { contains: () => false } }, refreshBox() {}, _delay() {} });
     if (parent) parent.children.push(n);
     return n;
 }

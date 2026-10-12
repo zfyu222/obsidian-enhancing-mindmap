@@ -268,6 +268,7 @@ export default class Node {
        // _t = _t.replace(/\n/g,"<br/>");
       //  console.log(_t);
         this.contentEl.innerText = this.data.text;
+        this.containEl.setAttribute('draggable', 'false');
         this.contentEl.setAttribute('contentEditable','true');
         this.contentEl.focus();
         this.mindmap.editNode = this;
@@ -519,6 +520,7 @@ export default class Node {
          }
 
         this.contentEl.setAttribute('contentEditable','false');
+        this.containEl.setAttribute('draggable', this.isSelect ? 'true' : 'false');
         this.data.isEdit = false;
 
         if(this.containEl.classList.contains('mm-edit-node')){

@@ -22,6 +22,11 @@ Markdown links. Image attachments remain after undo for redo and existing links.
 Image paste requires Obsidian 1.5.7+; clipboard image availability also depends on
 the platform. Browser fixture tests simulate the clipboard and vault API.
 
+Since 0.2.6-beta.6, clicking inside a node's text editor places the caret
+without refocusing the node container. Double-clicking selects words normally,
+and editing temporarily disables node dragging. Clicking another node still
+commits text changes, which can be undone.
+
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
 run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.
 Push a tag matching the version exactly, without a `v` prefix. The release

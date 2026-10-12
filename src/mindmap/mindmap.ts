@@ -1520,7 +1520,14 @@ export default class MindMap {
         }
     }
 
+    isNodeEditorTarget(target: EventTarget | null): boolean {
+        const node = this.editNode || this.selectNode;
+        return !!node?.data.isEdit && !!target && node.contentEl.contains(target as Node);
+    }
+
     appClickFn(evt: MouseEvent) {
+        // Leave browser caret placement and text selection inside the editor untouched.
+        if (this.isNodeEditorTarget(evt.target)) return;
         if (Date.now() < this._suppressClickUntil) { this._suppressClickUntil = 0; evt.preventDefault(); return; }
         var targetEl = evt.target as HTMLElement;
 
@@ -1594,6 +1601,7 @@ export default class MindMap {
     }
 
     appDragstart(evt: DragEvent) {
+        if (this.isNodeEditorTarget(evt.target)) return;
         const element = (evt.target as HTMLElement)?.closest('.mm-node');
         if (!element) return;
         evt.stopPropagation();
@@ -1885,6 +1893,7 @@ export default class MindMap {
     }
 
     appDblclickFn(evt: MouseEvent) {
+        if (this.isNodeEditorTarget(evt.target)) return;
         if (evt.target instanceof HTMLElement) {
 
             if (evt.target.hasClass('mm-node-bar')) {
