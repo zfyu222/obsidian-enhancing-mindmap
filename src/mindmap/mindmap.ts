@@ -96,6 +96,7 @@ export default class MindMap {
         this.data = data;
         this.appEl = document.createElement('div');
 
+        this.appEl.tabIndex = -1;
         this.appEl.classList.add('mm-mindmap');
         this.appEl.classList.add(`mm-theme-${this.setting.theme}`);
         this.appEl.style.overflow = "auto";
@@ -424,14 +425,18 @@ export default class MindMap {
     appKeydown(e: KeyboardEvent) {
         if (!this.view || this.view.app.workspace.getActiveViewOfType(MindMapView) !== this.view) return;
         const target = e.target as HTMLElement;
-        if (target ? !this.containerEL.contains(target) : !this.isFocused) return;
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        const historyKey = mod && !e.altKey && (key === 'z' || (key === 'y' && !e.shiftKey));
+        const pageTarget = !target || target === document.body || target === document.documentElement;
+        if (target ? !this.containerEL.contains(target) && !(historyKey && pageTarget) : !this.isFocused && !historyKey) return;
         if (e.defaultPrevented || this.isComposing || e.isComposing || e.keyCode === 229 || e.key === 'Process') return;
         const node = this.selectNode;
         const editing = !!(node?.data.isEdit || this.editNode?.data.isEdit);
         const textTarget = target && (target.isContentEditable ||
             (typeof target.closest === 'function' && target.closest('input, textarea, [contenteditable="true"]')));
-        // Only Enter/Tab in this node's editor may finish editing. Other text fields are native.
-        if (textTarget && !(editing && node?.contentEl.contains(target))) return;
+        // Node editors share map history; unrelated text fields keep their own shortcuts.
+        if (textTarget && !this.isNodeEditorTarget(target)) return;
         const consume = () => {
             e.preventDefault();
             e.stopPropagation();
@@ -444,26 +449,10 @@ export default class MindMap {
             else void this.pasteFromClipboard();
             return;
         }
-        const key = e.key.toLowerCase();
-        const mod = e.ctrlKey || e.metaKey;
-        if (mod && !e.altKey && !e.shiftKey && key === 'z' && editing) {
-            const editor = this.editNode || node;
-            const history = this.exec?.history;
-            const latest = history?.undos[history.undos.length - 1];
-            // The first auto-editor has no text edit to undo until its content changes.
-            if (latest?.name === 'addNode' && (latest as typeof latest & { node?: INode }).node === editor &&
-                editor.contentEl.innerText.trim() === editor._oldText?.trim()) {
-                consume();
-                this.undo();
-            }
-            return;
-        }
-        if (mod && !e.altKey && !editing) {
-            if (key === 'z' || (key === 'y' && !e.shiftKey)) {
-                consume();
-                if (key === 'y' || e.shiftKey) this.redo();
-                else this.undo();
-            }
+        if (historyKey) {
+            consume();
+            if (key === 'y' || e.shiftKey) this.redo();
+            else this.undo();
             return;
         }
         if (mod || e.altKey || e.shiftKey || !node) return;
@@ -1607,6 +1596,7 @@ export default class MindMap {
                 this._menuDom.style.display = 'none';
             } else {
                 this.clearSelectNode();
+                this.appEl.focus({ preventScroll: true });
                 this._menuDom.style.display='none';
             }
         }
@@ -2134,13 +2124,28 @@ export default class MindMap {
     execute(name: string, data?: any) {
         return this.exec.execute(name, data);
     }
+    finishEditingForHistory() {
+        const editor = this.editNode || (this.selectNode?.data.isEdit ? this.selectNode : null);
+        if (editor?.data.isEdit) editor.cancelEdit();
+        this.editNode = null;
+    }
+
+    focusAfterHistory() {
+        if (this.selectNode) this.selectNode.select(true);
+        else this.appEl.focus({ preventScroll: true });
+    }
+
     undo() {
+        this.finishEditingForHistory();
         this.exec.undo();
+        this.focusAfterHistory();
         console.log("Undo");
     }
 
     redo() {
+        this.finishEditingForHistory();
         this.exec.redo();
+        this.focusAfterHistory();
         console.log("Redo");
     }
 

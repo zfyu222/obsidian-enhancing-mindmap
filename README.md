@@ -27,10 +27,13 @@ without refocusing the node container. Double-clicking selects words normally,
 and editing temporarily disables node dragging. Clicking another node still
 commits text changes, which can be undone.
 
-Since 0.2.6-beta.7, Ctrl/Cmd+Z removes a just-created node from its automatic
-editor if its text is unchanged. Typed content keeps native text undo; when that
-returns to the initial content, another undo removes the node. Fast undo cancels
-the pending editor callback and synchronously restores parent selection.
+Since 0.2.6-beta.8, Ctrl/Cmd+Z and redo use one command history for the active
+mindmap regardless of selection or node editing mode. A pending editor draft is
+committed as one text change before undo; subsequent undo can remove node creation.
+Clicking blank space focuses the canvas, and body/page focus also routes history
+shortcuts to the active map. Other views and unrelated input fields keep their
+own shortcuts. Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo the same history.
+Fast creation undo still cancels pending editor callbacks (added in beta.7).
 
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
 run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.

@@ -54,6 +54,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{clipboardText=text;},readText:async()=>clipboardText}});
             window.testClipboard=()=>clipboardText;
             const map=Object.create(MindMap.prototype);
+            document.querySelector('#map').tabIndex=-1;
             Object.assign(map,{appEl:document.querySelector('#map'),containerEL:document.querySelector('#viewport'),selectedNodes:[],isFocused:true,_dragNodes:[],_selectionBase:[],_menuDom:{style:{}},_indicateDom:document.createElement('div'),_suppressClickUntil:0,exec:new Exec(),_panning:false});
             map.view={app:{workspace:{getActiveViewOfType:()=>map.view}}};
             map.addNode=(node,parent,index=-1)=>{parent.children.splice(index<0?parent.children.length:index,0,node);node.parent=parent;map.appEl.append(node.containEl)};
@@ -187,7 +188,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(() => testMap.editNode.contentEl.innerText), 'Typed text');
         await page.keyboard.press('Control+z');
         assert.equal(await page.evaluate(() => testNodes.b.children.length), 1);
-        assert.equal(await page.evaluate(() => testMap.editNode.contentEl.innerText), 'Sub title');
+        assert.equal(await page.evaluate(() => testNodes.b.children[0].data.text), 'Sub title');
+        assert.equal(await page.evaluate(() => testMap.editNode), null);
         await page.keyboard.press('Control+z');
         assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
         await page.keyboard.press('Enter');
@@ -195,7 +197,27 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(() => testMap.root.children.length), 4);
         await page.keyboard.press('Control+z');
         assert.equal(await page.evaluate(() => testMap.root.children.length), 3);
+        await page.keyboard.press('Tab');
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        await page.mouse.click(700, 420);
+        assert.deepEqual((await page.evaluate(() => snapshot())).selected, []);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        await page.keyboard.press('Control+y');
+        await page.waitForFunction(() => testMap.editNode?.data.isEdit);
+        await page.evaluate(() => { testMap.clearSelectNode(); document.activeElement.blur(); testMap.isFocused=false; });
+        assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.b.children.length), 0);
+        await page.evaluate(() => testMap.setSelectedNodes([testNodes.target]));
+        await page.locator('[data-id="Target"] .mm-node-content').dblclick();
+        await page.keyboard.press('Control+a'); await page.keyboard.type('Changed in editor');
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(() => testNodes.target.data.text), 'Alpha beta gamma');
+        assert.equal(await page.evaluate(() => testMap.editNode), null);
+        await page.keyboard.press('Control+Shift+z');
+        assert.equal(await page.evaluate(() => testNodes.target.data.text), 'Changed in editor');
         assert.deepEqual(errors, []);
-        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, new-node editor undo and Ctrl+Z passed.');
+        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

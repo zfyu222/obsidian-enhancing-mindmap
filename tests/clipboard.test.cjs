@@ -43,7 +43,12 @@ class Node {
     unSelect() { ActualNode.prototype.unSelect.call(this); }
     isShow() { return !this.isHide; }
     edit() { this._oldText = this.data.text; this.contentEl = { innerText: this.data.text, contains: () => true }; this.data.isEdit = true; this.mindmap.editNode = this; }
-    cancelEdit() { this.data.isEdit = false; }
+    setText(text) { this.data.text = text; if (this.contentEl) this.contentEl.innerText = text; }
+    cancelEdit() {
+        const text = this.contentEl?.innerText?.trim() ?? this.data.text;
+        if (this._oldText !== undefined && text !== this._oldText) this.mindmap.execute('changeNodeText', { node: this, oldText: this._oldText, text });
+        this.data.isEdit = false;
+    }
 }
 const commands = load('src/mindmap/Cmds.ts', { './INode': { default: Node }, './selection': selection });
 const { PasteNode } = commands;
@@ -139,7 +144,7 @@ function keyboardFixture() {
     map.view = { app: { workspace: { getActiveViewOfType: () => map.view } } };
     map._menuDom = { style: {} };
     map._indicateDom = { style: {} };
-    map.appEl = { contains: () => true };
+    map.appEl = { contains: () => true, focus() {} };
     map.containerEL = { contains: () => true, scrollLeft: 15, scrollTop: 25,
         getBoundingClientRect: () => ({ left: 0, top: 0, right: 1000, bottom: 800 }) };
     map.exec = new Exec();
@@ -367,19 +372,14 @@ test('Ctrl+Z after a paste removes the complete subtree through real Exec/Histor
     assert.equal(map.root.children.length, 1);
 });
 
-test('Tab finishes node editing once; native text undo and modified Enter/Tab remain untouched', () => {
-    const map = keyboardFixture();
-    let finishes = 0;
+test('Tab finishes editing and modified Enter/Tab retain their behavior', () => {
+    const map = keyboardFixture(); let finishes = 0;
     map.root.cancelEdit = () => { finishes++; map.root.data.isEdit = false; };
-    map.root.edit();
-    const editor = { isContentEditable: true };
+    map.root.edit(); const editor = { isContentEditable: true };
     map.root.contentEl = { contains: target => target === editor };
-    assert.equal(press(map, 'z', { ctrlKey: true, target: editor }).defaultPrevented, undefined);
     assert.equal(press(map, 'Enter', { shiftKey: true, target: editor }).defaultPrevented, undefined);
     assert.equal(press(map, 'Tab', { target: editor }).defaultPrevented, true);
-    assert.equal(finishes, 1);
-    assert.equal(map.editNode, null);
-    assert.equal(map.root.children.length, 0);
+    assert.equal(finishes, 1); assert.equal(map.editNode, null);
     assert.equal(press(map, 'Tab', { shiftKey: true }).defaultPrevented, undefined);
 });
 
@@ -539,12 +539,13 @@ test('Ctrl/Cmd+Z removes a newly added unchanged node from its auto-editor, and 
     assert.equal(map.root.children.length, 0);
 });
 
-test('new node typing retains native undo until text returns to the original content', async () => {
+test('draft text and node creation share ordered global undo/redo', async () => {
     const map = keyboardFixture(); press(map, 'Tab'); await nextTick();
     const added = map.selectNode; added.contentEl.innerText = 'New words';
-    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, undefined);
+    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, true);
     assert.equal(map.root.children.length, 1);
-    added.contentEl.innerText = added._oldText; // Browser text undo restored the initial placeholder.
+    assert.equal(added.data.text, 'Sub title');
+    assert.equal(map.editNode, null);
     assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, true);
     assert.equal(map.root.children.length, 0);
 });
@@ -557,4 +558,33 @@ test('fast undo before scheduled editor cannot refocus a removed node, even acro
     await nextTick(); assert.equal(map.selectNode, map.root);
     assert.equal(map.editNode, null); assert.equal(map.root.children.length, 0);
     assert.equal(map.exec.history.undos.length, 0); assert.equal(map.exec.history.redos.length, 1);
+});
+
+
+test('page/body focus and no selection still undo creation, while other views and inputs retain shortcuts', async () => {
+    const map = keyboardFixture(); press(map, 'Tab'); await nextTick();
+    map.clearSelectNode(); map.isFocused = false;
+    map.containerEL.contains = target => target !== dom.body;
+    const event = press(map, 'z', { ctrlKey: true, target: dom.body });
+    assert.equal(event.defaultPrevented, true); assert.equal(map.root.children.length, 0);
+    map.clearSelectNode(); assert.equal(press(map, 'y', { ctrlKey: true, target: dom.body }).defaultPrevented, true);
+    await nextTick(); assert.equal(map.root.children.length, 1);
+    const input = { closest: () => ({}) };
+    map.editNode.contentEl.contains = () => false;
+    map.containerEL.contains = () => true;
+    assert.equal(press(map, 'z', { ctrlKey: true, target: input }).defaultPrevented, undefined);
+    map.view.app.workspace.getActiveViewOfType = () => ({});
+    assert.equal(press(map, 'z', { ctrlKey: true, target: dom.body }).defaultPrevented, undefined);
+});
+
+test('existing node draft, creation, and text redo retain one unified sequence without selection', async () => {
+    const map = keyboardFixture(); press(map, 'Tab'); await nextTick(); const n = map.selectNode;
+    n.contentEl.innerText = 'Draft';
+    press(map, 'z', { ctrlKey: true }); assert.equal(n.data.text, 'Sub title');
+    map.clearSelectNode(); press(map, 'z', { ctrlKey: true }); assert.equal(map.root.children.length, 0);
+    press(map, 'y', { ctrlKey: true }); await nextTick();
+    press(map, 'y', { ctrlKey: true }); assert.equal(n.data.text, 'Draft');
+    n.edit(); n.contentEl.innerText = 'Changed again';
+    press(map, 'z', { metaKey: true }); assert.equal(n.data.text, 'Draft');
+    press(map, 'z', { metaKey: true, shiftKey: true }); assert.equal(n.data.text, 'Changed again');
 });
