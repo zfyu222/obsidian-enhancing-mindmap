@@ -113,9 +113,6 @@ export default class Node {
     }
 
     parseText(){
-        if (this.data.text.length === 0){
-            this.data.text = "Sub title";
-        }
         MarkdownRenderer.renderMarkdown( this.data.text ,this.contentEl,this.mindmap.path||"",null).then(()=>{
             this.data.mdText = this.contentEl.innerHTML;
             this.refreshBox();
@@ -237,7 +234,11 @@ export default class Node {
          },100)
     }
 
-    select(){
+    select(preserveSelection = false){
+        if (!preserveSelection && this.mindmap?.setSelectedNodes) {
+            this.mindmap.setSelectedNodes([this], this);
+            return;
+        }
         this.isSelect = true;
         this.containEl.setAttribute('draggable','true');
         //if(this.mindmap.view.plugin.settings.focusOnMove) {
@@ -267,6 +268,7 @@ export default class Node {
        // _t = _t.replace(/\n/g,"<br/>");
       //  console.log(_t);
         this.contentEl.innerText = this.data.text;
+        this.containEl.setAttribute('draggable', 'false');
         this.contentEl.setAttribute('contentEditable','true');
         this.contentEl.focus();
         this.mindmap.editNode = this;
@@ -500,9 +502,6 @@ export default class Node {
     cancelEdit(){
         console.log("CancelEdit");
         var text = this.contentEl.innerText.trim()||'';
-        if(text.length == 0){
-            text = this._oldText
-        }
         this.data.text = text;
         this.contentEl.innerText = '';
 
@@ -521,6 +520,7 @@ export default class Node {
          }
 
         this.contentEl.setAttribute('contentEditable','false');
+        this.containEl.setAttribute('draggable', this.isSelect ? 'true' : 'false');
         this.data.isEdit = false;
 
         if(this.containEl.classList.contains('mm-edit-node')){

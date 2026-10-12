@@ -6,6 +6,8 @@ import { MindMapView } from '../MindMapView'
 import { frontMatterKey, basicFrontmatter } from '../constants';
 import Exec from './Execute'
 import {uuid} from '../MindMapView'
+import { serializeSubtree, serializeForest, parseSubtree, clipboardAction } from './clipboard'
+import { selectionRoots, containsNode, selectionRect, intersectsRect } from './selection'
 
 import importXmind  from './import/xmindZen'
 import jsZip from 'jszip'
@@ -39,7 +41,16 @@ export default class MindMap {
     selectNode?: INode;
     lastSelectedNode?: INode;
     // selectingNodes?:boolean;
-    // selectedNodes?: INode[];
+    selectedNodes: INode[] = [];
+    _dragNodes: INode[] = [];
+    _selectionStart?: { x: number; y: number };
+    _selectionBase: INode[] = [];
+    _selectionMoved = false;
+    _selectionOverlay?: HTMLElement;
+    _panning = false;
+    _panMoved = false;
+    _suppressContextUntil = 0;
+    _suppressClickUntil = 0;
     setting: Setting;
     data: INodeData;
     drag?: boolean;
@@ -85,6 +96,7 @@ export default class MindMap {
         this.data = data;
         this.appEl = document.createElement('div');
 
+        this.appEl.tabIndex = -1;
         this.appEl.classList.add('mm-mindmap');
         this.appEl.classList.add(`mm-theme-${this.setting.theme}`);
         this.appEl.style.overflow = "auto";
@@ -139,6 +151,8 @@ export default class MindMap {
 
         this.appMouseDown = this.appMouseDown.bind(this);
         this.appMouseUp = this.appMouseUp.bind(this);
+        this.appContextMenu = this.appContextMenu.bind(this);
+        this.appPaste = this.appPaste.bind(this);
 
         this.appFocusIn = this.appFocusIn.bind(this);
         this.appFocusOut = this.appFocusOut.bind(this);
@@ -267,43 +281,52 @@ export default class MindMap {
         return snode;
     }
 
-    clearSelectNode() {
-        if (this.selectNode) {
-            this.lastSelectedNode = this.selectNode;
-            this.selectNode.unSelect();
-            this.selectNode = null
-        }
-        if (this.editNode) {
-            if(this.editNode.data.isEdit){
-                this.editNode.cancelEdit();
-            }
-            this.editNode = null;
-        }
-
-        // if(this.selectingNodes)
-        // {// Add the node to the selectedNodes
-        //     this.selectedNodes.push(this.selectNode);
-        // }
-        // else {
-        //     this.selectedNodes = [];
-        // }
-        // console.log(this.selectedNodes.length+" selected: "+this.selectedNodes);
-
-        // if (this.selectNode) {
-        //     this.selectNode.unSelect();
-        //     this.selectNode = null
-        // }
-        // if (this.editNode) {
-        //     if(this.editNode.data.isEdit){
-        //         this.editNode.cancelEdit();
-        //     }
-        //     this.editNode = null;
-        // }
+    getSelectedNodes(): INode[] {
+        return this.selectedNodes?.length ? this.selectedNodes.slice() : (this.selectNode ? [this.selectNode] : []);
     }
 
+    getSelectedRoots(): INode[] {
+        const roots = new Set(selectionRoots(this.getSelectedNodes()));
+        const ordered: INode[] = [];
+        this.traverseDF((node: INode) => { if (roots.has(node)) ordered.push(node); }, this.root, true);
+        return ordered;
+    }
+
+    setSelectedNodes(nodes: INode[], primary?: INode, focus = true) {
+        if (this.editNode?.data.isEdit && (nodes.length !== 1 || nodes[0] !== this.editNode)) {
+            this.editNode.cancelEdit();
+            this.editNode = null;
+        }
+        this.getSelectedNodes().forEach(node => node.unSelect());
+        this.selectedNodes = Array.from(new Set(nodes));
+        this.selectNode = primary && this.selectedNodes.includes(primary) ? primary : this.selectedNodes[0];
+        this.selectedNodes.forEach(node => {
+            node.isSelect = true;
+            node.containEl.setAttribute('draggable', 'true');
+            node.containEl.classList.add('mm-node-select');
+        });
+        if (focus && this.selectNode) this.selectNode.select(true);
+    }
+
+    clearSelectNode() {
+        this.lastSelectedNode = this.selectNode;
+        this.getSelectedNodes().forEach(node => node.unSelect());
+        this.selectedNodes = [];
+        this.selectNode = null;
+        if (this.editNode?.data.isEdit) this.editNode.cancelEdit();
+        this.editNode = null;
+    }
+
+    deleteSelectedNodes(nodes = this.getSelectedRoots()) {
+        if (nodes.some(node => node.data.isEdit)) return;
+        this.execute('removeNodes', { nodes });
+        this._menuDom.style.display = 'none';
+    }
 
     initEvent() {
         this.appEl.addEventListener('click', this.appClickFn);
+        this.appEl.addEventListener('contextmenu', this.appContextMenu, true);
+        document.addEventListener('paste', this.appPaste, true);
         this.appEl.addEventListener('mouseover', this.appMouseOverFn);
         this.appEl.addEventListener('dblclick', this.appDblclickFn);
         this.appEl.addEventListener('dragstart', this.appDragstart);
@@ -311,17 +334,18 @@ export default class MindMap {
         this.appEl.addEventListener('dragend', this.appDragend);
         this.appEl.addEventListener('drop', this.appDrop);
         document.addEventListener('keyup', this.appKeyup);
-        document.addEventListener('keydown', this.appKeydown);
+        document.addEventListener('keydown', this.appKeydown, true);
         document.addEventListener('compositionstart',this.compositionStart)
         document.addEventListener('compositionend',this.compositionEnd)
         document.body.addEventListener('mousewheel', this.appMousewheel);
 
         if(Platform.isDesktop){
             this.appEl.addEventListener('mousedown', this.appMouseDown);
-            this.appEl.addEventListener('mouseup', this.appMouseUp);
+            document.addEventListener('mouseup', this.appMouseUp);
+            window.addEventListener('blur', this.appMouseUp);
         }
 
-        this.appEl.addEventListener('mousemove', this.appMouseMove);
+        document.addEventListener('mousemove', this.appMouseMove);
 
         this.containerEL.addEventListener('focusin', this.appFocusIn);
         this.containerEL.addEventListener('focusout', this.appFocusOut);
@@ -334,6 +358,8 @@ export default class MindMap {
 
     removeEvent() {
         this.appEl.removeEventListener('click', this.appClickFn);
+        this.appEl.removeEventListener('contextmenu', this.appContextMenu, true);
+        document.removeEventListener('paste', this.appPaste, true);
         this.appEl.removeEventListener('dragstart', this.appDragstart);
         this.appEl.removeEventListener('dragover', this.appDragover);
         this.appEl.removeEventListener('dragend', this.appDragend);
@@ -341,7 +367,7 @@ export default class MindMap {
         this.appEl.removeEventListener('mouseover', this.appMouseOverFn);
         this.appEl.removeEventListener('drop', this.appDrop);
         document.removeEventListener('keyup', this.appKeyup);
-        document.removeEventListener('keydown', this.appKeydown);
+        document.removeEventListener('keydown', this.appKeydown, true);
         document.removeEventListener('compositionstart',this.compositionStart)
         document.removeEventListener('compositionend',this.compositionEnd)
 
@@ -349,10 +375,14 @@ export default class MindMap {
 
         if(Platform.isDesktop){
             this.appEl.removeEventListener('mousedown', this.appMouseDown);
-            this.appEl.removeEventListener('mouseup', this.appMouseUp);
+            document.removeEventListener('mouseup', this.appMouseUp);
+            window.removeEventListener('blur', this.appMouseUp);
         }
 
-        this.appEl.removeEventListener('mousemove', this.appMouseMove);
+        document.removeEventListener('mousemove', this.appMouseMove);
+        this._selectionOverlay?.remove();
+        this._selectionStart = null;
+        this._panning = false;
 
         this.containerEL.removeEventListener('focusin', this.appFocusIn);
         this.containerEL.removeEventListener('focusout', this.appFocusOut);
@@ -393,77 +423,66 @@ export default class MindMap {
         this.isFocused = false;
     }
     appKeydown(e: KeyboardEvent) {
-        if (!this.isFocused) return; // Check if Mindmap is in focus or not
-        var keyCode = e.keyCode || e.which || e.charCode;
-        var ctrlKey = e.ctrlKey || e.metaKey;
-        var shiftKey = e.shiftKey;
-        var altKey = e.altKey;
-
-        // if (ctrlKey) {                         // Shift -> Selecting
-        //     // ctrl -> selecting
-        //     this.selectingNodes = true;
-        // } else {
-        //     this.selectingNodes = false;
-        // }
-
-        if (!ctrlKey && !shiftKey && !altKey) { // No special key
-            // // tab
-            // // tab (OK) / Insert (OK)
-            // if (keyCode == 9 || keyCode == 45) {
-            //     e.preventDefault();
-            //     e.stopPropagation();
-            // }
-
-            // // Space
-            // if (keyCode == 32) {
-            //     var node = this.selectNode;
-            //     if (node && !node.data.isEdit) {
-            //         e.preventDefault();
-            //         e.stopPropagation();
-            //         node.edit();
-            //         this._menuDom.style.display = 'none';
-            //     }
-            // }
-
-
+        if (!this.view || this.view.app.workspace.getActiveViewOfType(MindMapView) !== this.view) return;
+        const target = e.target as HTMLElement;
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        const historyKey = mod && !e.altKey && (key === 'z' || (key === 'y' && !e.shiftKey));
+        const pageTarget = !target || target === document.body || target === document.documentElement;
+        if (target ? !this.containerEL.contains(target) && !(historyKey && pageTarget) : !this.isFocused && !historyKey) return;
+        if (e.defaultPrevented || this.isComposing || e.isComposing || e.keyCode === 229 || e.key === 'Process') return;
+        const node = this.selectNode;
+        const editing = !!(node?.data.isEdit || this.editNode?.data.isEdit);
+        const textTarget = target && (target.isContentEditable ||
+            (typeof target.closest === 'function' && target.closest('input, textarea, [contenteditable="true"]')));
+        // Node editors share map history; unrelated text fields keep their own shortcuts.
+        if (textTarget && !this.isNodeEditorTarget(target)) return;
+        const consume = () => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+        };
+        const action = clipboardAction(e, editing);
+        if (action && (node || (action === 'paste' && this.root))) {
+            consume();
+            if (action === 'copy') void this.copyToClipboard();
+            else void this.pasteFromClipboard();
+            return;
         }
-
-
-        if (ctrlKey && !shiftKey && !altKey) {  // CTRL key
-        //     //ctrl + y
-        //     if (keyCode == 89) {
-        //         e.preventDefault();
-        //         e.stopPropagation();
-        //         this.redo();
-        //     }
-
-        //     //ctrl + z
-        //     if (keyCode == 90) {
-        //         e.preventDefault();
-        //         e.stopPropagation();
-        //         this.undo();
-        //     }
+        if (historyKey) {
+            consume();
+            if (key === 'y' || e.shiftKey) this.redo();
+            else this.undo();
+            return;
         }
-
-            // Shift + F2 : Edit as space does
-        // if (!ctrlKey && shiftKey && !altKey) {  // SHIFT key
-        //     if (keyCode == 113) {
-        //     // if (keyCode == 45) {
-        //         var node = this.selectNode;
-        //         if (node && !node.data.isEdit) {
-        //             e.preventDefault();
-        //             e.stopPropagation();
-        //             if (!node.isExpand) {
-        //                 node.expand();
-        //             }
-        //             if (!node.parent) return;
-        //             node.mindmap.execute('addSiblingNode', {
-        //                 parent: node.parent
-        //             });
-        //             this._menuDom.style.display='none';
-        //         }
-        //     }
-        // }
+        if (mod || e.altKey || e.shiftKey || !node) return;
+        if (key === 'tab' || key === 'insert' || key === 'enter') {
+            consume();
+            if (editing) {
+                node.cancelEdit();
+                this.editNode = null;
+                node.select();
+                return;
+            }
+            if (key === 'enter') {
+                if (!node.parent) return;
+                this.execute('addSiblingNode', {
+                    parent: node.parent,
+                    index: node.parent.children.indexOf(node) + 1
+                });
+            } else {
+                if (!node.isExpand) node.expand();
+                this.execute('addChildNode', { parent: node });
+            }
+            this._menuDom.style.display = 'none';
+        } else if (!editing && key === ' ') {
+            consume();
+            node.edit();
+            this._menuDom.style.display = 'none';
+        } else if (!editing && (key === 'delete' || key === 'backspace') && !node.data.isRoot) {
+            consume();
+            this.deleteSelectedNodes();
+        }
     }
 
      compositionStart(e: KeyboardEvent) {
@@ -1502,7 +1521,15 @@ export default class MindMap {
         }
     }
 
+    isNodeEditorTarget(target: EventTarget | null): boolean {
+        const node = this.editNode || this.selectNode;
+        return !!node?.data.isEdit && !!target && node.contentEl.contains(target as Node);
+    }
+
     appClickFn(evt: MouseEvent) {
+        // Leave browser caret placement and text selection inside the editor untouched.
+        if (this.isNodeEditorTarget(evt.target)) return;
+        if (Date.now() < this._suppressClickUntil) { this._suppressClickUntil = 0; evt.preventDefault(); return; }
         var targetEl = evt.target as HTMLElement;
 
         if (targetEl) {
@@ -1549,8 +1576,8 @@ export default class MindMap {
 
                  if(targetEl.closest('.mm-icon-delete-node')){
                     var selectNode = this.selectNode;
-                    if(!node.data.isRoot && selectNode){
-                       selectNode.mindmap.execute("deleteNodeAndChild", { node: selectNode });
+                    if(selectNode){
+                       this.deleteSelectedNodes();
                        this._menuDom.style.display='none';
                     }
                  }
@@ -1560,38 +1587,41 @@ export default class MindMap {
             if (targetEl.closest('.mm-node')) {
                 var id = targetEl.closest('.mm-node').getAttribute('data-id');
                 var node = this.getNodeById(id);
-                if (!node.isSelect) {
-                    this.clearSelectNode();
-                    this.selectNode = node;
-                    this.selectNode?.select();
-                    // this._menuDom.style.display='block';
-                    this._menuDom.style.display='none';
-                    var box = this.selectNode.getBox();
-                    // this._menuDom.style.left = `${box.x + box.width + 10}px`;
-                    // this._menuDom.style.top = `${box.y + box.height/2 - 14}px`;
+                if (evt.ctrlKey || evt.metaKey || evt.shiftKey) {
+                    const selected = this.getSelectedNodes();
+                    this.setSelectedNodes(selected.includes(node) ? selected.filter(n => n !== node) : [...selected, node], node);
+                } else {
+                    this.setSelectedNodes([node], node);
                 }
+                this._menuDom.style.display = 'none';
             } else {
                 this.clearSelectNode();
+                this.appEl.focus({ preventScroll: true });
                 this._menuDom.style.display='none';
             }
         }
     }
 
-    appDragstart(evt: MouseEvent) {
+    appDragstart(evt: DragEvent) {
+        if (this.isNodeEditorTarget(evt.target)) return;
+        const element = (evt.target as HTMLElement)?.closest('.mm-node');
+        if (!element) return;
         evt.stopPropagation();
+        const node = this.getNodeById(element.getAttribute('data-id'));
+        if (!this.getSelectedNodes().includes(node)) this.setSelectedNodes([node], node);
+        this._dragNodes = this.getSelectedRoots();
+        if (!this._dragNodes.length || this._dragNodes.some(n => !n.parent || n.data.isEdit)) { evt.preventDefault(); return; }
+        this._dragNode = node;
+        this.drag = true;
         this.startX = evt.pageX;
         this.startY = evt.pageY;
-        if (evt.target instanceof HTMLElement) {
-            if (evt.target.closest('.mm-node')) {
-                var id = evt.target.closest('.mm-node').getAttribute('data-id');
-                this._dragNode = this.getNodeById(id);
-                this.drag = true;
-            }
-        }
+        evt.dataTransfer?.setData('text/plain', serializeForest(this._dragNodes));
+        if (evt.dataTransfer) evt.dataTransfer.effectAllowed = 'copyMove';
     }
 
     appDragend(evt: MouseEvent) {
         this.drag = false;
+        this._dragNodes = [];
         this._indicateDom.style.display = 'none'
         this._menuDom.style.display = 'none';
     }
@@ -1600,17 +1630,21 @@ export default class MindMap {
         evt.preventDefault();
         evt.stopPropagation();
         var target =evt.target as HTMLElement;
-        var x = evt.pageX;
-        var y = evt.pageY;
+        var x = evt.clientX;
+        var y = evt.clientY;
 
         if (this.drag) {
             this.dx = x - this.startX;
-            this.dx = y - this.startY;
+            this.dy = y - this.startY;
         }
 
-        if(target.closest('.mm-node')){
+        if(this.drag && target.closest('.mm-node')){
             var nodeId =target.closest('.mm-node').getAttribute('data-id');
             var node = this.getNodeById(nodeId);
+            if (this._dragNodes.some(root => containsNode(root, node))) {
+                this._indicateDom.style.display = 'none';
+                return;
+            }
             var box = node.getBox();
             this._dragType = this._getDragType(node, x, y);
             this._indicateDom.style.display = 'block';
@@ -1696,28 +1730,24 @@ export default class MindMap {
     }
 
     appDrop(evt: any) {
-        if (evt.target instanceof HTMLElement) {
-            if (evt.target.closest('.mm-node')) {
-                evt.preventDefault();
-                var dropNodeId = evt.target.closest('.mm-node').getAttribute('data-id');
-                var dropNode = this.getNodeById(dropNodeId);
-                if (this._dragNode.data.isRoot) {
-
+        const element = (evt.target as HTMLElement)?.closest('.mm-node');
+        if (element && this.drag && this._dragNodes.length) {
+            evt.preventDefault();
+            const dropNode = this.getNodeById(element.getAttribute('data-id'));
+            if (!this._dragNodes.some(root => containsNode(root, dropNode))) {
+                if (evt.ctrlKey || evt.metaKey) {
+                    this.pasteNode(serializeForest(this._dragNodes), dropNode);
                 } else {
-                    if (evt.ctrlKey) {// Ctrl key pressed: copy the node
-                        let copiedNode = this.copyNode(this._dragNode);
-                        dropNode.select();
-                        this.pasteNode(copiedNode);
-
-                    }
-                    else {// Move the node
-                        this.moveNode(this._dragNode, dropNode,this._dragType);
-                    }
+                    const type = this._getDragType(dropNode, evt.clientX, evt.clientY);
+                    this.execute('moveNodes', { nodes: this._dragNodes, dropNode, type });
                 }
             }
         }
+        this.drag = false;
+        this._dragNodes = [];
+        this._suppressClickUntil = Date.now() + 150;
 
-        var files = evt.dataTransfer.files;
+        var files = evt.dataTransfer?.files || [];
             if(files.length){
                   var f = files[0];
                   if(f.name.toLowerCase().endsWith('.xmind')){
@@ -1778,41 +1808,94 @@ export default class MindMap {
     }
 
     appMouseMove(evt: MouseEvent) {
-        const targetEl = evt.target as HTMLElement;
-        this.scalePointer = [];
-        this.scalePointer.push(evt.offsetX, evt.offsetY);
-        if (targetEl.closest('.mm-node')) {
-            var id = targetEl.closest('.mm-node').getAttribute('data-id');
-            var node = this.getNodeById(id);
-            if (node) {
-                var box = node.getBox();
-                this.scalePointer = [];
-                this.scalePointer.push(box.x + box.width / 2, box.y + box.height / 2);
+        if (this._panning) {
+            if (Math.abs(evt.clientX - this.startX) + Math.abs(evt.clientY - this.startY) >= 4) this._panMoved = true;
+            this.containerEL.scrollLeft = this._left - (evt.clientX - this.startX);
+            this.containerEL.scrollTop = this._top - (evt.clientY - this.startY);
+            return;
+        }
+        if (this._selectionStart) {
+            if (Math.abs(evt.clientX - this._selectionStart.x) + Math.abs(evt.clientY - this._selectionStart.y) < 4 && !this._selectionMoved) return;
+            this._selectionMoved = true;
+            const bounds = this.containerEL.getBoundingClientRect();
+            const rect = selectionRect(this._selectionStart.x, this._selectionStart.y,
+                Math.max(bounds.left, Math.min(bounds.right, evt.clientX)),
+                Math.max(bounds.top, Math.min(bounds.bottom, evt.clientY)));
+            if (!this._selectionOverlay) {
+                this._selectionOverlay = document.createElement('div');
+                this._selectionOverlay.className = 'mm-selection-rectangle';
+                document.body.appendChild(this._selectionOverlay);
             }
-        }else{
-            if(this.drag){
-                this.containerEL.scrollLeft = this._left - (evt.pageX - this.startX);
-                this.containerEL.scrollTop = this._top - (evt.pageY - this.startY);
-            }
+            Object.assign(this._selectionOverlay.style, { display: 'block', left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.right - rect.left}px`, height: `${rect.bottom - rect.top}px` });
+            const selected: INode[] = [];
+            this.traverseDF((node: INode) => {
+                const box = node.containEl.getBoundingClientRect();
+                if (node.isShow() && intersectsRect(bounds, box) && intersectsRect(rect, box)) selected.push(node);
+            }, this.root, true);
+            this.setSelectedNodes([...this._selectionBase, ...selected], undefined, false);
+            return;
+        }
+        const target = evt.target as HTMLElement;
+        if (!target || !this.appEl.contains(target)) return;
+        this.scalePointer = [evt.offsetX, evt.offsetY];
+        const element = target.closest('.mm-node');
+        if (element) {
+            const node = this.getNodeById(element.getAttribute('data-id'));
+            if (node) { const box = node.getBox(); this.scalePointer = [box.x + box.width / 2, box.y + box.height / 2]; }
         }
     }
 
-    appMouseDown(evt:MouseEvent){
-        const targetEl = evt.target as HTMLElement;
-        if(!targetEl.closest('.mm-node')){
-            this.drag = true;
-            this.startX = evt.pageX;
-            this.startY = evt.pageY;
+    appMouseDown(evt: MouseEvent) {
+        const target = evt.target as HTMLElement;
+        if (target.closest('.mm-node-menu, .mm-node-bar, a, input, textarea, [contenteditable="true"]')) return;
+        if (evt.button === 2) {
+            evt.preventDefault();
+            this._panning = true;
+            this._panMoved = false;
+            this._suppressContextUntil = 0;
+            this.startX = evt.clientX;
+            this.startY = evt.clientY;
             this._left = this.containerEL.scrollLeft;
             this._top = this.containerEL.scrollTop;
+            return;
+        }
+        if (evt.button !== 0) return;
+        const element = target.closest('.mm-node');
+        if (element) {
+            const node = this.getNodeById(element.getAttribute('data-id'));
+            if (!evt.ctrlKey && !evt.metaKey && !evt.shiftKey && !this.getSelectedNodes().includes(node)) this.setSelectedNodes([node], node);
+            return;
+        }
+        evt.preventDefault();
+        this._selectionBase = evt.ctrlKey || evt.metaKey || evt.shiftKey ? this.getSelectedNodes() : [];
+        this.clearSelectNode();
+        this._selectionStart = { x: evt.clientX, y: evt.clientY };
+        this._selectionMoved = false;
+        this._menuDom.style.display = 'none';
+    }
+
+    appMouseUp(evt: MouseEvent | FocusEvent) {
+        if (this._selectionStart && (evt.type === 'blur' || (evt as MouseEvent).button === 0)) {
+            if (this._selectionMoved) this._suppressClickUntil = Date.now() + 150;
+            this._selectionStart = null;
+            if (this._selectionOverlay) this._selectionOverlay.style.display = 'none';
+            if (this.selectNode) this.selectNode.select(true);
+        }
+        if (this._panning && (evt.type === 'blur' || (evt as MouseEvent).button === 2)) {
+            if (this._panMoved) this._suppressContextUntil = Date.now() + 500;
+            this._panning = false;
         }
     }
 
-    appMouseUp(evt:MouseEvent){
-        this.drag = false;
+    appContextMenu(evt: MouseEvent) {
+        if (this._panning || Date.now() < this._suppressContextUntil) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+        }
     }
 
     appDblclickFn(evt: MouseEvent) {
+        if (this.isNodeEditorTarget(evt.target)) return;
         if (evt.target instanceof HTMLElement) {
 
             if (evt.target.hasClass('mm-node-bar')) {
@@ -1822,7 +1905,7 @@ export default class MindMap {
             }
             if (evt.target.closest('.mm-node') instanceof HTMLElement) {
                 var id = evt.target.closest('.mm-node').getAttribute('data-id');
-                this.selectNode = this.getNodeById(id);
+                this.setSelectedNodes([this.getNodeById(id)]);
                 if (!this.editNode || (this.editNode && this.editNode != this.selectNode)) {
                     this.selectNode?.edit();
                     this.editNode = this.selectNode;
@@ -1858,6 +1941,10 @@ export default class MindMap {
     }
 
     clearNode() {
+        this.clearSelectNode();
+        this._dragNodes = [];
+        this._selectionStart = null;
+        if (this._selectionOverlay) this._selectionOverlay.style.display = 'none';
         //delete node
         this.traverseBF((n: INode) => {
             this.contentEL.removeChild(n.containEl);
@@ -2037,13 +2124,28 @@ export default class MindMap {
     execute(name: string, data?: any) {
         return this.exec.execute(name, data);
     }
+    finishEditingForHistory() {
+        const editor = this.editNode || (this.selectNode?.data.isEdit ? this.selectNode : null);
+        if (editor?.data.isEdit) editor.cancelEdit();
+        this.editNode = null;
+    }
+
+    focusAfterHistory() {
+        if (this.selectNode) this.selectNode.select(true);
+        else this.appEl.focus({ preventScroll: true });
+    }
+
     undo() {
+        this.finishEditingForHistory();
         this.exec.undo();
+        this.focusAfterHistory();
         console.log("Undo");
     }
 
     redo() {
+        this.finishEditingForHistory();
         this.exec.redo();
+        this.focusAfterHistory();
         console.log("Redo");
     }
 
@@ -2353,10 +2455,7 @@ export default class MindMap {
 
                     }
                 } else {
-                    for (var i = 0; i < n.getLevel() - level; i++) {
-                        space += '   ';
-                    }
-                    md += `${space}-\n`;
+                    md += `${space}-${ending}\n`;
                 }
             }
         }, this.root, true);
@@ -2396,63 +2495,100 @@ export default class MindMap {
         }, 600);
     }
 
-    copyNode(node?:any){
-        var n = node||this.selectNode;
-        if(n){
-           var data:any = [];
-           function copyNode(n:INode, pid:any) {
-                  var d = n.getData();
-                  d.id = uuid();
-                  d.pid = pid;
-                  data.push({
-                      id:d.id,
-                      text:d.text,
-                      pid:pid,
-                      isExpand:d.isExpand,
-                      note:d.note
-                  });
-                  n.children.forEach((c) => {
-                     copyNode(c, d.id);
-                  });
-          }
+    copyNode(node?: INode): string {
+        return node ? serializeSubtree(node) : serializeForest(this.getSelectedRoots());
+    }
 
-           copyNode(n,null)
-
-           var _data = {
-               type:'copyNode',
-               text:data
-           };
-
-           return JSON.stringify(_data);
-
-        }else{
-            return ''
+    async cutSelectedNodes(): Promise<void> {
+        const nodes = this.getSelectedRoots();
+        if (!nodes.length || nodes.some(node => !node.parent || node.data.isEdit) || this.editNode?.data.isEdit) return;
+        try {
+            await navigator.clipboard.writeText(serializeForest(nodes));
+            if (nodes.every(node => this.getNodeById(node.getId()) === node && !node.data.isEdit)) this.deleteSelectedNodes(nodes);
+        } catch (_) {
+            new Notice('Unable to cut mind map nodes to the clipboard.');
         }
-  }
+    }
 
-  pasteNode(text:string){
-        var node = this.selectNode;
-        if(text){
-            try{
-                  var json =JSON.parse(text);
-                  if(json.type&&json.type=='copyNode'){
-                    var data = json.text;
-                    if(!node.isExpand){
-                       node.expand();
-                       node.clearCacheData();
+    async copyToClipboard(node?: INode): Promise<boolean> {
+        if (!(node || this.getSelectedRoots().length) || node?.data.isEdit || this.editNode?.data.isEdit) return false;
+        try {
+            await navigator.clipboard.writeText(this.copyNode(node));
+            return true;
+        } catch (_) {
+            new Notice('Unable to copy mind map nodes to the clipboard.');
+            return false;
+        }
+    }
+
+    canPasteTo(target: INode): boolean {
+        return !!target && this.getNodeById(target.getId()) === target &&
+            !target.data.isEdit && !this.editNode?.data.isEdit &&
+            this.view?.app.workspace.getActiveViewOfType(MindMapView) === this.view;
+    }
+
+    appPaste(evt: ClipboardEvent) {
+        const element = evt.target as HTMLElement;
+        if (evt.defaultPrevented || !this.canPasteTo(this.selectNode || this.root) ||
+            (element ? !this.containerEL.contains(element) : !this.isFocused) ||
+            element?.closest('input, textarea, [contenteditable="true"]')) return;
+        const data = evt.clipboardData;
+        if (!data) return;
+        const text = data.getData('text/plain');
+        const images = Array.from(data.files).filter(file => file.type.startsWith('image/'));
+        if (!text && !images.length) return;
+        evt.preventDefault(); evt.stopImmediatePropagation();
+        void this.pasteContent(text, images, this.selectNode || this.root);
+    }
+
+    async pasteFromClipboard(): Promise<void> {
+        const target = this.selectNode || this.root;
+        if (!this.canPasteTo(target)) return;
+        try {
+            let text = '';
+            const images: Blob[] = [];
+            const clipboard = navigator.clipboard as typeof navigator.clipboard & {
+                read?: () => Promise<Array<{ types: string[], getType(type: string): Promise<Blob> }>>;
+            };
+            if (clipboard.read) {
+                try {
+                    for (const item of await clipboard.read()) {
+                        if (item.types.includes('text/plain')) text += await (await item.getType('text/plain')).text();
+                        const imageType = item.types.find(type => type.startsWith('image/'));
+                        if (imageType) images.push(await item.getType(imageType));
                     }
-                   this.execute('pasteNode',{
-                       node:node,
-                       data:data
-                   })
-
-                   navigator.clipboard.writeText('');
-                  }
-            }catch(err){
-                console.log(err)
-            }
+                } catch (_) { text = await clipboard.readText(); }
+            } else text = await clipboard.readText();
+            await this.pasteContent(text, images, target);
+        } catch (_) {
+            new Notice('Unable to paste clipboard content into the mind map.');
         }
+    }
 
-  }
+    async pasteContent(text: string, images: Blob[], target: INode): Promise<void> {
+        if (!this.canPasteTo(target)) return;
+        // Internal node data takes precedence over other clipboard representations.
+        if (this.pasteNode(text, target)) return;
+        const texts = text.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim().length > 0);
+        try {
+            for (const image of images) {
+                if (!this.canPasteTo(target)) return;
+                texts.push(await this.view.saveClipboardImage(image));
+            }
+            if (!texts.length || !this.canPasteTo(target)) return;
+            const data = texts.map(content => ({ id: uuid(), pid: null, text: content, isRoot: false, isEdit: false, expanded: true, isExpand: true }));
+            this.execute('pasteNode', { node: target, data });
+        } catch (_) {
+            new Notice('Unable to save clipboard image. No nodes were pasted.');
+        }
+    }
+
+    pasteNode(text: string, node: INode = this.selectNode): boolean {
+        if (!node || node.data.isEdit) return false;
+        const data = parseSubtree(text, uuid);
+        if (!data) return false;
+        this.execute('pasteNode', { node, data });
+        return true;
+    }
 
 }

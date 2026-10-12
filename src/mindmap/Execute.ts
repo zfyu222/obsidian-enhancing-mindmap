@@ -25,8 +25,12 @@ interface DataProps {
 
     // Add command to history
     inHistory?:boolean,
+    index?:number,
 
-    data?:any
+    data?:any,
+    nodes?:INode[],
+    dropNode?:INode,
+    type?:string,
 };
 
 export default class Exec{
@@ -39,11 +43,13 @@ export default class Exec{
                 if(data){
                     var d = {
                         id: uuid(),
-                        text: data.text || t('Sub title')
+                        text: data.text ?? t('Sub title')
                     }
                     var parent:INode = data.parent;
                     var node = new INode(d,parent.mindmap);
-                    this.history.execute(new cmd.AddNode(node, data.parent, parent.mindmap));
+                    const command = new cmd.AddNode(node, data.parent, parent.mindmap);
+                    if (data.index !== undefined) command.index = data.index;
+                    this.history.execute(command);
                     l_return = node;
                 }
                 break;
@@ -90,6 +96,12 @@ export default class Exec{
             break
             case 'pasteNode':
                 this.history.execute(new cmd.PasteNode(data.node,data.data));
+                break;
+            case 'removeNodes':
+                this.history.execute(new cmd.RemoveNodes(data.nodes));
+                break;
+            case 'moveNodes':
+                this.history.execute(new cmd.MoveNodes(data.nodes, data.dropNode, data.type));
                 break;
        }
 

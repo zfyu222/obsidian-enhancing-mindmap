@@ -52,7 +52,29 @@ mindmap-plugin: basic
 | 放大、缩小                 | Ctrl/Cmd + 滚轮 |
 | 居中          | Ctrl/Cmd + E |
 
+选中节点后按 Ctrl/Cmd+C，再选中目标节点按 Ctrl/Cmd+V，会将整个子树复制为目标节点的子节点。
+支持重复粘贴和跨思维导图粘贴；编辑文字时仍使用普通文字复制粘贴。
+原有 Alt+Shift+C/V 命令仍可使用，每次子树粘贴可以整体撤销和重做。
+
+Tab/Insert 添加子节点，Enter 在选中节点后添加同级节点；编辑节点文字时，Tab/Enter 完成编辑，Shift+Enter 换行。
+Ctrl/Cmd+Z 撤销节点操作（包括整棵粘贴的子树），Ctrl/Cmd+Y 或 Ctrl/Cmd+Shift+Z 重做；文字编辑期间保留原生文字撤销。
+
+本 fork 由 [OBSB 项目](https://github.com/zfyu222/OBSB)维护。
+通过 BRAT 添加 `zfyu222/obsidian-enhancing-mindmap`，选择最新 Release 或指定测试版安装。
+插件 ID 保持不变，同一知识库中会替换原版 Enhancing Mindmap。
+发布时同步 `manifest.json`、`package.json`、`versions.json` 的版本，推送同名 tag（不加 `v`），
+GitHub Actions 会校验版本、测试、构建并上传 BRAT 需要的三个文件；测试版 tag 自动标记为预发布。
+
 ## 功能
+
+### 框选与批量操作
+
+在空白处按住左键拖动框选可见节点，鼠标中键拖动平移画布。
+按住 Ctrl/Cmd/Shift 框选可以追加节点；配合这些修饰键单击节点可以切换选中状态。
+Delete/Backspace 批量删除，Ctrl/Cmd+C 复制多棵子树，Ctrl/Cmd+V 粘贴为目标节点的子节点。
+从任一选中节点拖动，可将整组移动到目标的子节点或同级位置；Ctrl/Cmd+拖动则复制到目标下。
+同时选中父节点和后代时，只操作父节点子树；保持 Markdown 中的节点顺序。
+每次批量删除、拖动和粘贴均可整体撤销/重做。根节点不能删除或移动，不能拖入所选子树内部。
 
 1. 编辑节点
 2. 拖动节点至某节点

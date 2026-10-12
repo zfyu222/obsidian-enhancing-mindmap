@@ -29,6 +29,11 @@
   word-break: break-word;
 }
 
+.mm-node .mm-node-content:empty {
+  min-width: 1em;
+  min-height: 1.4em;
+}
+
 .mm-node-content > p,
 .mm-node-content > h1,
 .mm-node-content > h2,
@@ -171,5 +176,19 @@
 
 .theme-light .mm-node-menu svg{
   fill: #333;
+}
+
+.mm-selection-rectangle {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  box-sizing: border-box;
+  border: 1px solid var(--interactive-accent, #5294e2);
+  background: rgba(82, 148, 226, 0.15);
+}
+
+.mm-node.mm-node-select .mm-node-content {
+  outline: 2px solid var(--interactive-accent, #5294e2);
+  outline-offset: 2px;
 }
 

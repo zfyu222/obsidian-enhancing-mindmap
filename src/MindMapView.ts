@@ -1,5 +1,6 @@
 import {
   HoverParent,
+  FileManager,
   HoverPopover,
   Menu,
   TextFileView,
@@ -454,6 +455,20 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.onQuickPreview(file, md);
   }
 
+  async saveClipboardImage(image: Blob): Promise<string> {
+    const extensions: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp', 'image/svg+xml': 'svg', 'image/avif': 'avif' };
+    const extension = extensions[image.type];
+    if (!extension) throw new Error('Unsupported clipboard image type');
+    const filename = `Pasted-image-${Date.now()}-${uuid()}.${extension}`;
+    const manager = this.app.fileManager as FileManager & {
+      getAvailablePathForAttachment?: (filename: string, sourcePath: string) => Promise<string>;
+    };
+    if (!manager.getAvailablePathForAttachment) throw new Error('Image paste requires Obsidian 1.5.7 or later');
+    const path = await manager.getAvailablePathForAttachment(filename, this.file?.path || '');
+    const file = await this.app.vault.createBinary(path, await image.arrayBuffer());
+    return '!' + manager.generateMarkdownLink(file, this.file?.path || '');
+  }
+
   getMdText(str: string) {
     var md = str.trim().replace(FRONT_MATTER_REGEX, '');
     return md.trim();
@@ -467,14 +482,14 @@ export class MindMapView extends TextFileView implements HoverParent {
         flag = false;
         mapData.v = '> ' + mapData.v;
       }
-      const regexResult = /^.+ \^([a-z0-9\-]+)$/gim.exec(mapData.v);
+      const regexResult = /^(?:.* )?\^([a-z0-9\-]+)$/gim.exec(mapData.v);
       const id = regexResult != null ? regexResult[1] : null
 
      // console.log(id);
 
       var map: INodeData = {
         id: id || uuid(),
-        text: id ? mapData.v.replace(` ^${id}`, '') : mapData.v,
+        text: id ? mapData.v.replace(new RegExp(` ?\\^${id}$`, 'im'), '') : mapData.v,
         children: [],
         expanded: id ? false:true
       };
