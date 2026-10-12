@@ -204,7 +204,8 @@ function cleanNode(node, depth = 0) {
   } else {
     node.c.forEach(child => cleanNode(child, depth + 1));
 
-    if (node.c.length === 1 && !node.c[0].v) {
+    // Empty headings/list items are real mindmap nodes; unwrap only containers.
+    if (node.c.length === 1 && !node.c[0].v && !['heading', 'list_item'].includes(node.c[0].t)) {
       node.c = node.c[0].c;
     }
   }

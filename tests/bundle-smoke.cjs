@@ -55,3 +55,34 @@ map.deleteSelectedNodes();
 assert.equal(operations[4][0], 'removeNodes');
 assert.equal(operations[4][1].nodes.length, 2);
 console.log('Release bundle keyboard smoke check passed (Tab, Enter, Ctrl+Z/Y).');
+
+// Exercise the bundled parser cleanup: empty content is a real node, not a wrapper.
+const cleanNode = vm.runInNewContext(`${declarations.get('cleanNode')}\ncleanNode`, {
+    _extends: Object.assign, _extends$1: Object.assign
+});
+const tree = { t: 'root', v: '', p: {}, c: [{ t: 'heading', v: '', p: {}, c: [
+    { t: 'bullet_list', v: '', p: {}, c: [{ t: 'list_item', v: '', p: {}, c: [
+        { t: 'bullet_list', v: '', p: {}, c: [{ t: 'list_item', v: 'Child', p: {}, c: [] }] }
+    ] }] }
+] }] };
+cleanNode(tree);
+assert.equal(tree.c[0].t, 'heading');
+assert.equal(tree.c[0].c[0].t, 'list_item');
+assert.equal(tree.c[0].c[0].v, '');
+assert.equal(tree.c[0].c[0].c[0].v, 'Child');
+const nodeDeclaration = [...declarations.values()].find(text => text.includes('select(preserveSelection = false)'));
+assert.ok(nodeDeclaration);
+const ActualNode = vm.runInNewContext(`${declarations.get('__awaiter')}\nconst ActualNode = ${nodeDeclaration};\nActualNode`, {
+    obsidian: { MarkdownRenderer: { renderMarkdown: async () => {} } }, console
+});
+const empty = Object.create(ActualNode.prototype);
+empty.data = { text: 'Before' }; empty._oldText = 'Before';
+empty.contentEl = { innerText: '', innerHTML: '', setAttribute() {} };
+empty.containEl = { classList: { contains: () => false } };
+empty.refreshBox = () => {}; empty._delay = () => {};
+empty.mindmap = { emit() {}, execute(command, data) {
+    assert.equal(command, 'changeNodeText'); assert.equal(data.text, '');
+} };
+empty.cancelEdit(); assert.equal(empty.data.text, '');
+empty.parseText(); assert.equal(empty.data.text, '');
+console.log('Release bundle empty-node edit, rendering and parser cleanup checks passed.');

@@ -29,6 +29,11 @@
   word-break: break-word;
 }
 
+.mm-node .mm-node-content:empty {
+  min-width: 1em;
+  min-height: 1.4em;
+}
+
 .mm-node-content > p,
 .mm-node-content > h1,
 .mm-node-content > h2,

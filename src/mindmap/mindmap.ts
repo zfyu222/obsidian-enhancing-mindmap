@@ -2408,10 +2408,7 @@ export default class MindMap {
 
                     }
                 } else {
-                    for (var i = 0; i < n.getLevel() - level; i++) {
-                        space += '   ';
-                    }
-                    md += `${space}-\n`;
+                    md += `${space}-${ending}\n`;
                 }
             }
         }, this.root, true);

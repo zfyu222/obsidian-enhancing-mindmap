@@ -43,7 +43,7 @@ export default class Exec{
                 if(data){
                     var d = {
                         id: uuid(),
-                        text: data.text || t('Sub title')
+                        text: data.text ?? t('Sub title')
                     }
                     var parent:INode = data.parent;
                     var node = new INode(d,parent.mindmap);

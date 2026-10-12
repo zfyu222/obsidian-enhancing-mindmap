@@ -467,14 +467,14 @@ export class MindMapView extends TextFileView implements HoverParent {
         flag = false;
         mapData.v = '> ' + mapData.v;
       }
-      const regexResult = /^.+ \^([a-z0-9\-]+)$/gim.exec(mapData.v);
+      const regexResult = /^(?:.* )?\^([a-z0-9\-]+)$/gim.exec(mapData.v);
       const id = regexResult != null ? regexResult[1] : null
 
      // console.log(id);
 
       var map: INodeData = {
         id: id || uuid(),
-        text: id ? mapData.v.replace(` ^${id}`, '') : mapData.v,
+        text: id ? mapData.v.replace(new RegExp(` ?\\^${id}$`, 'im'), '') : mapData.v,
         children: [],
         expanded: id ? false:true
       };
