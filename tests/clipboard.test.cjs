@@ -516,6 +516,33 @@ test('click/double-click inside the current editor leave native caret and text s
     assert.equal(map._selectionStart, undefined);
 });
 
+test('editor text drag released outside preserves editing, but the next deliberate click commits', () => {
+    const map = keyboardFixture(); const node = map.root; const inner = {};
+    node.data.isEdit = true; node.contentEl = { contains: target => target === inner }; map.editNode = node;
+    let commits = 0; node.cancelEdit = () => { node.data.isEdit = false; commits++; };
+    const outside = { tagName: 'DIV', hasClass: () => false, closest: () => null };
+    map.appMouseDown({ button: 0, target: inner });
+    map.appMouseUp({ type: 'mouseup', button: 0, target: outside });
+    map.appClickFn({ target: outside, preventDefault() { throw Error('Native selection must survive'); } });
+    assert.equal(node.data.isEdit, true); assert.equal(commits, 0);
+    assert.equal(map._selectionStart, undefined);
+    // A release outside the entire graph may have no click dispatched to it.
+    map.appMouseDown({ button: 0, target: inner });
+    map.appMouseUp({ type: 'mouseup', button: 0, target: outside });
+    map.appMouseDown({ button: 0, target: outside, preventDefault() {} });
+    map.appMouseUp({ type: 'mouseup', button: 0, target: outside });
+    map.appClickFn({ target: outside });
+    assert.equal(node.data.isEdit, false); assert.equal(commits, 1);
+});
+
+test('window blur clears the pending editor mouse gesture', () => {
+    const map = keyboardFixture(); const inner = {};
+    map.root.data.isEdit = true; map.root.contentEl = { contains: target => target === inner }; map.editNode = map.root;
+    map.appMouseDown({ button: 0, target: inner });
+    map.appMouseUp({ type: 'blur' });
+    assert.equal(map._editorMouseDown, false); assert.equal(map._editorClickPending, false);
+});
+
 test('clicking another node commits the previous editor once and selects the destination', () => {
     const map = keyboardFixture(); const edited = map.root; const other = add(map, map.root, 'Other');
     edited.data.isEdit = true; edited.contentEl = { contains: () => false }; map.editNode = edited;

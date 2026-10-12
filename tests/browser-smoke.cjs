@@ -179,6 +179,22 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.locator('[data-id="Target"] .mm-node-content').dblclick();
         assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
         assert.ok((await page.evaluate(() => getSelection().toString())).length > 0);
+        // Real text selection dragged out of the editor must keep its range and focus.
+        for (const end of [{ x: 700, y: 420 }, { x: 300, y: 260 }]) {
+            const start = await page.evaluate(() => {
+                const range = document.createRange();
+                range.setStart(testNodes.target.contentEl.firstChild, 3);
+                range.setEnd(testNodes.target.contentEl.firstChild, 4);
+                const box = range.getBoundingClientRect();
+                return { x: box.left, y: (box.top + box.bottom) / 2 };
+            });
+            await page.mouse.move(start.x, start.y); await page.mouse.down();
+            await page.mouse.move(end.x, end.y, { steps: 12 }); await page.mouse.up();
+            assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
+            assert.equal(await page.evaluate(() => document.activeElement === testNodes.target.contentEl), true);
+            assert.ok((await page.evaluate(() => getSelection().toString())).length > 0);
+            assert.deepEqual((await page.evaluate(() => snapshot())).selected, ['Target']);
+        }
         await page.locator('[data-id="Branch B"]').click();
         assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), false);
         assert.equal(await page.evaluate(() => testNodes.target.data.text), updated);

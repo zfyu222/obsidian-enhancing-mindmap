@@ -51,6 +51,8 @@ export default class MindMap {
     _panMoved = false;
     _suppressContextUntil = 0;
     _suppressClickUntil = 0;
+    _editorMouseDown = false;
+    _editorClickPending = false;
     setting: Setting;
     data: INodeData;
     drag?: boolean;
@@ -1529,6 +1531,12 @@ export default class MindMap {
     }
 
     appClickFn(evt: MouseEvent) {
+        // A drag that began in the editor may produce a click on its ancestor
+        // when released outside. It still belongs to native text selection.
+        if (this._editorClickPending) {
+            this._editorClickPending = false;
+            return;
+        }
         // Leave browser caret placement and text selection inside the editor untouched.
         if (this.isNodeEditorTarget(evt.target)) return;
         if (Date.now() < this._suppressClickUntil) { this._suppressClickUntil = 0; evt.preventDefault(); return; }
@@ -1848,6 +1856,9 @@ export default class MindMap {
     }
 
     appMouseDown(evt: MouseEvent) {
+        this._editorClickPending = false;
+        this._editorMouseDown = evt.button === 0 && this.isNodeEditorTarget(evt.target);
+        if (this._editorMouseDown) return;
         const target = evt.target as HTMLElement;
         if (target.closest('.mm-node-menu, .mm-node-bar, a, input, textarea, [contenteditable="true"]')) return;
         if (evt.button === 2) {
@@ -1877,6 +1888,13 @@ export default class MindMap {
     }
 
     appMouseUp(evt: MouseEvent | FocusEvent) {
+        if (evt.type === 'blur') {
+            this._editorMouseDown = false;
+            this._editorClickPending = false;
+        } else if ((evt as MouseEvent).button === 0 && this._editorMouseDown) {
+            this._editorMouseDown = false;
+            this._editorClickPending = true;
+        }
         if (this._selectionStart && (evt.type === 'blur' || (evt as MouseEvent).button === 0)) {
             if (this._selectionMoved) this._suppressClickUntil = Date.now() + 150;
             this._selectionStart = null;
