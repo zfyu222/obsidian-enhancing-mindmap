@@ -1,5 +1,13 @@
-// Keep the existing clipboard format so older plugin versions can read it.
+import { selectionRoots } from './selection';
+
+// Single subtrees keep the existing format; forests use a distinct type.
 export function serializeSubtree(node: any): string {
+    return serializeForest([node]);
+}
+
+export function serializeForest(nodes: any[]): string {
+    const roots = selectionRoots(nodes);
+    if (!roots.length) return '';
     const data: any[] = [];
     const visit = (current: any, pid: string | null) => {
         const d = current.getData();
@@ -12,24 +20,27 @@ export function serializeSubtree(node: any): string {
         data.push(d);
         current.children.forEach((child: any) => visit(child, d.id));
     };
-    visit(node, null);
-    return JSON.stringify({ type: 'copyNode', text: data });
+    roots.forEach(node => visit(node, null));
+    return JSON.stringify({ type: roots.length === 1 ? 'copyNode' : 'copyNodes', text: data });
 }
 
 // Validate the complete subtree before changing the map, and allocate IDs per paste.
 export function parseSubtree(text: string, createId: () => string): any[] | null {
     try {
         const payload = JSON.parse(text);
-        if (!payload || payload.type !== 'copyNode' || !Array.isArray(payload.text) || !payload.text.length) return null;
+        if (!payload || !['copyNode', 'copyNodes'].includes(payload.type) || !Array.isArray(payload.text) || !payload.text.length) return null;
         const ids = new Map<string, string>();
+        let roots = 0;
         for (let i = 0; i < payload.text.length; i++) {
             const d = payload.text[i];
             if (!d || typeof d.id !== 'string' || typeof d.text !== 'string' || ids.has(d.id)) return null;
-            if (i === 0 ? d.pid != null : !ids.has(d.pid)) return null;
+            if (d.pid == null) roots++;
+            else if (!ids.has(d.pid)) return null;
             ids.set(d.id, createId());
         }
+        if (!roots || (payload.type === 'copyNode' && roots !== 1)) return null;
         return payload.text.map((d: any, i: number) => {
-            const result = { ...d, id: ids.get(d.id), pid: i === 0 ? null : ids.get(d.pid), isRoot: false, isEdit: false };
+            const result = { ...d, id: ids.get(d.id), pid: d.pid == null ? null : ids.get(d.pid), isRoot: false, isEdit: false };
             delete result.children;
             return result;
         });

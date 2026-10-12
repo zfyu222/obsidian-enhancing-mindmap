@@ -85,6 +85,27 @@ Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo them. While editing text, text undo remains
 
 ## Features
 
+### Box selection and batch actions
+
+Drag on blank space with the left mouse button to select visible intersecting
+nodes. Hold Ctrl/Cmd/Shift to add to a box selection, or click nodes with these
+modifiers to toggle them. The middle mouse button pans the canvas.
+
+Delete/Backspace deletes the selected subtrees; Ctrl/Cmd+C copies them and
+Ctrl/Cmd+V pastes them under the selected destination. Drag any selected node to
+move the whole selection using the usual child/sibling drop zones; Ctrl/Cmd-drag
+copies it under the destination. If both a parent and its descendant are selected,
+only the parent subtree is processed. Outline order is preserved. Each batch
+delete, move or paste is one undoable operation. The map root cannot be deleted
+or moved, and selected subtrees cannot be dropped into themselves.
+
+The optional `npm run test:browser` test exercises real browser mouse/key events
+against extracted release-bundle logic with fixture nodes, not a live Obsidian
+instance. It needs Playwright and a browser installed separately. You may pass
+an existing Playwright module path and browser channel:
+`npm run test:browser -- /path/to/playwright msedge`.
+The screenshot is saved under `node_modules/.cache/mindmap-tests/marquee.png`.
+
 1. edit node
 2. drag node to another node
 3. undo/redo

@@ -11,8 +11,8 @@ class History {
     }
 
     execute(command:Command) {
-        this.clearRedo();
         if (command.execute()){
+            this.clearRedo();
             var length = this.undos.length;
             if (length >= this.limit) {
                 this.undos.shift();

@@ -1,5 +1,6 @@
 import INode from './INode'
 import MindMap  from './mindmap';
+import { selectionRoots, containsNode } from './selection';
 
 export abstract class Command {
     name:string;
@@ -299,6 +300,7 @@ export class ExpandNode extends Command{
     node: INode;
     data: any[];
     firstNode: INode;
+    firstNodes: INode[] = [];
     wasExpanded: boolean;
     constructor(node: INode, data: any[]) {
         super('pasteNode');
@@ -309,6 +311,7 @@ export class ExpandNode extends Command{
     }
 
     execute(): boolean {
+        this.firstNodes = [];
         if (!this.node.isExpand) this.node.expand();
         const nodes = new Map<string, INode>();
         const collapsed: INode[] = [];
@@ -316,7 +319,8 @@ export class ExpandNode extends Command{
             // INode mutates its data; keep the command payload intact for redo.
             const d = JSON.parse(JSON.stringify(original));
             const n = new INode(d, this.mind);
-            const parent = i === 0 ? this.node : nodes.get(d.pid);
+            const parent = d.pid == null ? this.node : nodes.get(d.pid);
+            if (d.pid == null) this.firstNodes.push(n);
             d.pid = parent.getId();
             this.mind.addNode(n, parent);
             nodes.set(d.id, n);
@@ -336,17 +340,87 @@ export class ExpandNode extends Command{
         if (this.firstNode) {
             let selected = this.mind.selectNode;
             while (selected) {
-                if (selected === this.firstNode) {
+                if (this.firstNodes.indexOf(selected) >= 0) {
                     this.mind.clearSelectNode();
                     this.node.select();
                     break;
                 }
                 selected = selected.parent;
             }
-            this.mind.removeNode(this.firstNode);
+            this.firstNodes.forEach(node => this.mind.removeNode(node));
             if (!this.wasExpanded) this.node.collapse();
             this.node.clearCacheData();
             this.refresh();
         }
+    }
+}
+
+export class RemoveNodes extends Command {
+    entries: { node: INode; parent: INode; index: number }[];
+    constructor(nodes: INode[]) {
+        super('removeNodes');
+        const roots = selectionRoots(nodes).filter(node => !!node.parent && !node.data.isRoot);
+        this.entries = roots.map(node => ({ node, parent: node.parent, index: node.parent.children.indexOf(node) }));
+        this.mind = roots[0]?.mindmap;
+    }
+    execute(): boolean {
+        if (!this.entries.length) return false;
+        this.mind.clearSelectNode();
+        this.entries.forEach(({ node }) => this.mind.removeNode(node));
+        this.entries[0].parent.select();
+        this.refresh();
+        return true;
+    }
+    undo() {
+        // Original order is significant when restoring siblings to the same parent.
+        this.entries.slice().sort((a, b) => a.index - b.index).forEach(({ node, parent, index }) => this.mind.addNode(node, parent, index));
+        this.mind.setSelectedNodes(this.entries.map(entry => entry.node));
+        this.refresh();
+    }
+}
+
+export class MoveNodes extends Command {
+    entries: { node: INode; parent: INode; index: number; direct: string }[];
+    drop: INode;
+    type: string;
+    destination: INode;
+    expanded: boolean;
+    constructor(nodes: INode[], drop: INode, type: string) {
+        super('moveNodes');
+        this.drop = drop;
+        this.type = type;
+        const roots = selectionRoots(nodes);
+        this.entries = roots.map(node => ({ node, parent: node.parent, index: node.parent?.children.indexOf(node), direct: node.direct }));
+        this.destination = type.indexOf('child') >= 0 ? drop : drop.parent;
+        this.expanded = this.destination?.isExpand;
+        this.mind = drop.mindmap;
+    }
+    execute(): boolean {
+        if (!this.entries.length || !this.destination || this.entries.some(({ node }) => !node.parent || containsNode(node, this.drop))) return false;
+        this.mind.clearSelectNode();
+        this.entries.forEach(({ node }) => this.mind.removeNode(node));
+        const child = this.type.indexOf('child') >= 0;
+        let index = child ? this.destination.children.length : this.destination.children.indexOf(this.drop) + (this.type === 'top' || this.type === 'left' ? 0 : 1);
+        this.destination.expand();
+        this.entries.forEach(({ node }) => {
+            this.mind.addNode(node, this.destination, index++);
+            if (child && this.type.split('-')[1]) node.direct = this.type.split('-')[1];
+            this.mind.traverseBF((n: INode) => { n.boundingRect = null; n.stroke = ''; }, node);
+        });
+        this.mind.setSelectedNodes(this.entries.map(entry => entry.node));
+        this.refresh();
+        return true;
+    }
+    undo() {
+        this.mind.clearSelectNode();
+        this.entries.forEach(({ node }) => this.mind.removeNode(node));
+        this.entries.slice().sort((a, b) => a.index - b.index).forEach(({ node, parent, index, direct }) => {
+            this.mind.addNode(node, parent, index);
+            node.direct = direct;
+            this.mind.traverseBF((n: INode) => { n.boundingRect = null; n.stroke = ''; }, node);
+        });
+        if (!this.expanded) this.destination.collapse();
+        this.mind.setSelectedNodes(this.entries.map(entry => entry.node));
+        this.refresh();
     }
 }

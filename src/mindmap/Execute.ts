@@ -27,7 +27,10 @@ interface DataProps {
     inHistory?:boolean,
     index?:number,
 
-    data?:any
+    data?:any,
+    nodes?:INode[],
+    dropNode?:INode,
+    type?:string,
 };
 
 export default class Exec{
@@ -93,6 +96,12 @@ export default class Exec{
             break
             case 'pasteNode':
                 this.history.execute(new cmd.PasteNode(data.node,data.data));
+                break;
+            case 'removeNodes':
+                this.history.execute(new cmd.RemoveNodes(data.nodes));
+                break;
+            case 'moveNodes':
+                this.history.execute(new cmd.MoveNodes(data.nodes, data.dropNode, data.type));
                 break;
        }
 

@@ -1,0 +1,112 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const ts = require('typescript');
+const { chromium } = require(process.argv[2] || 'playwright');
+const repo = path.resolve(__dirname, '..');
+const screenshotDir = path.join(repo, 'node_modules', '.cache', 'mindmap-tests');
+fs.mkdirSync(screenshotDir, { recursive: true });
+const source = ts.createSourceFile('main.js', fs.readFileSync(`${repo}/main.js`, 'utf8'), ts.ScriptTarget.Latest, true);
+const definitions = new Map();
+function visit(node) {
+    if ((ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node)) && node.name) definitions.set(node.name.text, node.getText(source));
+    ts.forEachChild(node, visit);
+}
+visit(source);
+const names = ['__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'serializeSubtree', 'parseSubtree', 'Command', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap'];
+const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
+(async () => {
+    const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
+    try {
+        const page = await browser.newPage({ viewport: { width: 1100, height: 620 } });
+        const errors = [];
+        page.on('pageerror', error => errors.push(error.message));
+        await page.setContent(`<style>${fs.readFileSync(`${repo}/styles.css`, 'utf8')}
+          body{margin:0;font:16px system-ui;background:#20242c;color:white}h3{margin:16px}
+          #viewport{position:relative;margin:16px;width:1050px;height:470px;overflow:auto;border:1px solid #657080}
+          #map{position:relative;width:1200px;height:650px;background:#272d38}.mm-node{position:absolute}.mm-node-content{padding:12px 20px;background:#38485e;border-radius:8px}
+          #status{margin:16px}</style><h3>Mind map batch selection — release bundle test harness</h3><div id="viewport"><div id="map"></div></div><div id="status"></div>`);
+        await page.addScriptTag({ content: `(() => {
+            ${code}
+            const cmd = { RemoveNodes, MoveNodes, PasteNode };
+            const MindMapView = class {};
+            const ProdNode = ${Array.from(definitions.values()).find(text => text.includes('select(preserveSelection = false)'))};
+            class Node {
+                constructor(data, mindmap) {
+                    this.data=data; this.mindmap=mindmap; this.children=[]; this.isExpand=true;
+                    this.containEl=document.createElement('div'); this.containEl.className='mm-node';
+                    this.containEl.setAttribute('data-id',data.id);this.containEl.tabIndex=-1;
+                    this.contentEl=document.createElement('div');this.contentEl.className='mm-node-content';this.contentEl.textContent=data.text;this.containEl.append(this.contentEl);
+                }
+                getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
+                select(preserve){ProdNode.prototype.select.call(this,preserve)} unSelect(){ProdNode.prototype.unSelect.call(this)}
+                getBox(){return {x:parseFloat(this.containEl.style.left),y:parseFloat(this.containEl.style.top),width:this.containEl.offsetWidth,height:this.containEl.offsetHeight}}
+                isShow(){return !this.isHide} clearCacheData(){} refreshBox(){} setPosition(){} expand(){this.isExpand=true} collapse(){this.isExpand=false}
+            }
+            const Node$1 = Node;
+            const Notice = class { constructor(text) { console.error(text); } };
+            let clipboardText='';
+            Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{clipboardText=text;},readText:async()=>clipboardText}});
+            window.testClipboard=()=>clipboardText;
+            const map=Object.create(MindMap.prototype);
+            Object.assign(map,{appEl:document.querySelector('#map'),containerEL:document.querySelector('#viewport'),selectedNodes:[],isFocused:true,_dragNodes:[],_selectionBase:[],_menuDom:{style:{}},_indicateDom:document.createElement('div'),_suppressClickUntil:0,exec:new Exec(),_panning:false});
+            map.view={app:{workspace:{getActiveViewOfType:()=>map.view}}};
+            map.addNode=(node,parent,index=-1)=>{parent.children.splice(index<0?parent.children.length:index,0,node);node.parent=parent;map.appEl.append(node.containEl)};
+            map.removeNode=node=>{const i=node.parent.children.indexOf(node);node.parent.children.splice(i,1);const remove=n=>{n.containEl.remove();n.children.forEach(remove)};remove(node);return i};
+            map.emit=()=>{};
+            const make=(id,parent,x,y)=>{const node=new Node({id,text:id},map);node.containEl.style.left=x+'px';node.containEl.style.top=y+'px';if(parent)map.addNode(node,parent);else map.appEl.append(node.containEl);return node};
+            map.root=make('Root',null,70,180);map.root.data.isRoot=true;
+            const a=make('Branch A',map.root,260,80),child=make('A child',a,480,80),b=make('Branch B',map.root,260,240),target=make('Target',map.root,780,180);
+            map.setSelectedNodes([map.root]);
+            map.appEl.addEventListener('mousedown',e=>map.appMouseDown(e));
+            map.appEl.addEventListener('click',e=>map.appClickFn(e));
+            map.appEl.addEventListener('dragstart',e=>map.appDragstart(e));
+            map.appEl.addEventListener('dragover',e=>map.appDragover(e));
+            map.appEl.addEventListener('drop',e=>map.appDrop(e));
+            map.appEl.addEventListener('dragend',e=>map.appDragend(e));
+            document.addEventListener('mousemove',e=>map.appMouseMove(e));
+            document.addEventListener('mouseup',e=>map.appMouseUp(e));
+            document.addEventListener('keydown',e=>map.appKeydown(e),true);
+            HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
+            window.testMap=map;window.testNodes={a,child,b,target};
+            window.snapshot=()=>({selected:map.getSelectedNodes().map(n=>n.getId()),roots:map.getSelectedRoots().map(n=>n.getId()),children:map.root.children.map(n=>n.getId()),target:target.children.map(n=>n.getId()),scroll:[map.containerEL.scrollLeft,map.containerEL.scrollTop],undos:map.exec.history.undos.length});
+        })();` });
+        assert.deepEqual(errors, [], 'Harness initialization errors');
+        await page.mouse.move(235, 115);
+        await page.mouse.down();
+        await page.mouse.move(650, 405, { steps: 12 });
+        await page.screenshot({ path: path.join(screenshotDir, 'marquee.png') });
+        await page.mouse.up();
+        let state = await page.evaluate(() => snapshot());
+        assert.deepEqual(state.selected, ['Branch A', 'A child', 'Branch B']);
+        assert.deepEqual(state.roots, ['Branch A', 'Branch B']);
+        assert.deepEqual(state.scroll, [0, 0]);
+        await page.keyboard.press('Control+c');
+        assert.equal(JSON.parse(await page.evaluate(() => testClipboard())).text.length, 3);
+        await page.locator('[data-id="Target"]').click();
+        await page.keyboard.press('Control+v');
+        state = await page.evaluate(() => snapshot());
+        assert.equal(state.target.length, 2);
+        await page.keyboard.press('Control+z');
+        assert.deepEqual((await page.evaluate(() => snapshot())).target, []);
+        await page.mouse.move(235, 115); await page.mouse.down();
+        await page.mouse.move(650, 405, { steps: 8 }); await page.mouse.up();
+        await page.keyboard.press('Delete');
+        state = await page.evaluate(() => snapshot());
+        assert.deepEqual(state.children, ['Target']);
+        assert.equal(state.undos, 1);
+        await page.keyboard.press('Control+z');
+        state = await page.evaluate(() => snapshot());
+        assert.deepEqual(state.children, ['Branch A', 'Branch B', 'Target']);
+        // Real native drag events from a member of the multiselection.
+        await page.locator('[data-id="Branch A"]').dragTo(page.locator('[data-id="Target"]'));
+        state = await page.evaluate(() => snapshot());
+        assert.deepEqual(state.target, ['Branch A', 'Branch B']);
+        assert.equal(state.undos, 1);
+        await page.keyboard.press('Control+z');
+        state = await page.evaluate(() => snapshot());
+        assert.deepEqual(state.children, ['Branch A', 'Branch B', 'Target']);
+        assert.deepEqual(errors, []);
+        console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop and Ctrl+Z passed.');
+    } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode=1; });

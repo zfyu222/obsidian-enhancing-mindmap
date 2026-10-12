@@ -237,7 +237,11 @@ export default class Node {
          },100)
     }
 
-    select(){
+    select(preserveSelection = false){
+        if (!preserveSelection && this.mindmap?.setSelectedNodes) {
+            this.mindmap.setSelectedNodes([this], this);
+            return;
+        }
         this.isSelect = true;
         this.containEl.setAttribute('draggable','true');
         //if(this.mindmap.view.plugin.settings.focusOnMove) {

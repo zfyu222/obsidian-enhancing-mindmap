@@ -124,15 +124,7 @@ export default class MindMapPlugin extends Plugin {
         const mindmapView = this.app.workspace.getActiveViewOfType(MindMapView);
         if(mindmapView){
           var mindmap = mindmapView.mindmap;
-          const node = mindmap.selectNode;
-          if (node && !node.data.isRoot && !node.data.isEdit) {
-            void mindmap.copyToClipboard(node).then(copied => {
-              if (copied && mindmap.getNodeById(node.getId()) === node && !node.data.isEdit) {
-                mindmap.execute('deleteNodeAndChild', { node });
-                mindmap._menuDom.style.display = 'none';
-              }
-            });
-          }
+          void mindmap.cutSelectedNodes();
         }
 
       }
@@ -334,7 +326,7 @@ export default class MindMapPlugin extends Plugin {
           var mindmap = mindmapView.mindmap;
           var node = mindmap.selectNode;
           if (node && !node.data.isRoot && !node.data.isEdit) {
-            node.mindmap.execute("deleteNodeAndChild", { node });
+            mindmap.deleteSelectedNodes();
             mindmap._menuDom.style.display='none';
           }
           //else: Deletion makes no sense

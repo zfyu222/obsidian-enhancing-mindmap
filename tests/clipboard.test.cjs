@@ -4,19 +4,31 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
 
+const dom = {
+    createElement() { return { style: {}, className: '', remove() {} }; },
+    body: { appendChild() {} }
+};
 function load(file, dependencies = {}) {
     const module = { exports: {} };
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] || {}, console, setTimeout, clearTimeout });
+    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] || {}, console, setTimeout, clearTimeout, document: dom, window: {} });
     return module.exports;
 }
-const clipboard = load('src/mindmap/clipboard.ts');
+const selection = load('src/mindmap/selection.ts');
+const clipboard = load('src/mindmap/clipboard.ts', { './selection': selection });
+const { default: ActualNode } = load('src/mindmap/INode.ts');
 let serial = 0;
 const id = () => `new-${++serial}`;
 class Node {
-    constructor(data, mindmap) { this.data = data; this.mindmap = mindmap; this.children = []; this.isExpand = true; }
+    constructor(data, mindmap) {
+        this.data = data; this.mindmap = mindmap; this.children = []; this.isExpand = true;
+        const classes = new Set();
+        this.containEl = { setAttribute() {}, focus() {},
+            classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
+            getBoundingClientRect: () => this.rect || { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 } };
+    }
     getId() { return this.data.id; }
     getData() { return JSON.parse(JSON.stringify(this.data)); }
     getLevel() { return this.parent ? this.parent.getLevel() + 1 : 0; }
@@ -25,12 +37,13 @@ class Node {
     clearCacheData() {}
     setPosition() {}
     refreshBox() {}
-    select() { this.mindmap.selectNode = this; }
-    unSelect() {}
+    select(preserve) { ActualNode.prototype.select.call(this, preserve); }
+    unSelect() { ActualNode.prototype.unSelect.call(this); }
+    isShow() { return !this.isHide; }
     edit() { this.data.isEdit = true; this.mindmap.editNode = this; }
     cancelEdit() { this.data.isEdit = false; }
 }
-const commands = load('src/mindmap/Cmds.ts', { './INode': { default: Node } });
+const commands = load('src/mindmap/Cmds.ts', { './INode': { default: Node }, './selection': selection });
 const { PasteNode } = commands;
 const history = load('src/mindmap/History.ts');
 const { default: Exec } = load('src/mindmap/Execute.ts', {
@@ -38,7 +51,7 @@ const { default: Exec } = load('src/mindmap/Execute.ts', {
     '../MindMapView': { uuid: id }, '../lang/helpers': { t: text => text }
 });
 const { default: MindMap } = load('src/mindmap/mindmap.ts', {
-    './clipboard': clipboard, '../MindMapView': { uuid: id }, './INode': { default: Node }
+    './clipboard': clipboard, './selection': selection, '../MindMapView': { uuid: id }, './INode': { default: Node }
 });
 function fixture() {
     const map = Object.create(MindMap.prototype);
@@ -123,7 +136,10 @@ function keyboardFixture() {
     map.isFocused = true;
     map.view = { app: { workspace: { getActiveViewOfType: () => map.view } } };
     map._menuDom = { style: {} };
-    map.containerEL = { contains: () => true };
+    map._indicateDom = { style: {} };
+    map.appEl = { contains: () => true };
+    map.containerEL = { contains: () => true, scrollLeft: 15, scrollTop: 25,
+        getBoundingClientRect: () => ({ left: 0, top: 0, right: 1000, bottom: 800 }) };
     map.exec = new Exec();
     map.execute = MindMap.prototype.execute;
     map.addNode = (n, parent, index = -1) => {
@@ -167,6 +183,170 @@ test('Tab creates one child through real history and Enter inserts one adjacent 
     assert.equal(map.root.children[2], tail);
     assert.equal(map.exec.history.undos.length, 2);
     await nextTick();
+});
+
+function add(map, parent, name) {
+    const node = new Node({ id: name, text: name }, map);
+    map.addNode(node, parent);
+    return node;
+}
+test('marquee selects visible intersecting nodes in viewport coordinates without panning, then click preserves selection', () => {
+    const map = keyboardFixture();
+    map.selectedNodes = [];
+    const a = add(map, map.root, 'A'), b = add(map, a, 'B'), hidden = add(map, a, 'Hidden'), outside = add(map, map.root, 'Outside');
+    a.rect = { left: 60, top: 40, right: 120, bottom: 70, width: 60, height: 30 };
+    b.rect = { left: 160, top: 40, right: 220, bottom: 70, width: 60, height: 30 };
+    hidden.rect = a.rect; hidden.isHide = true;
+    outside.rect = { left: 1200, top: 40, right: 1260, bottom: 70, width: 60, height: 30 };
+    const background = { closest: () => null };
+    map.appMouseDown({ button: 0, clientX: 250, clientY: 100, target: background, preventDefault() {} });
+    map.appMouseMove({ clientX: 40, clientY: 20 }); // Drag in reverse direction.
+    assert.equal(map.getSelectedNodes().length, 2);
+    assert.equal(map.getSelectedRoots().length, 1);
+    assert.equal(map.getSelectedRoots()[0], a);
+    assert.equal(map.containerEL.scrollLeft, 15);
+    assert.equal(map.containerEL.scrollTop, 25);
+    assert.equal(map._selectionOverlay.style.left, '40px');
+    map.appMouseUp({ button: 0 });
+    map.appClickFn({ preventDefault() {} });
+    assert.equal(map.getSelectedNodes().length, 2);
+    assert.equal(map._selectionOverlay.style.display, 'none');
+});
+
+test('middle-button background drag pans while left box selection supports additive selection', () => {
+    const map = keyboardFixture();
+    const node = add(map, map.root, 'A');
+    map.setSelectedNodes([node]);
+    const background = { closest: () => null };
+    map.appMouseDown({ button: 1, clientX: 100, clientY: 100, target: background, preventDefault() {} });
+    map.appMouseMove({ clientX: 120, clientY: 130 });
+    assert.equal(map.containerEL.scrollLeft, -5);
+    assert.equal(map.containerEL.scrollTop, -5);
+    map.appMouseUp({ button: 1 });
+    assert.equal(map.getSelectedNodes()[0], node);
+    const b = add(map, map.root, 'B');
+    b.rect = { left: 60, top: 40, right: 120, bottom: 70, width: 60, height: 30 };
+    map.appMouseDown({ button: 0, ctrlKey: true, clientX: 30, clientY: 20, target: background, preventDefault() {} });
+    map.appMouseMove({ clientX: 130, clientY: 80 });
+    assert.equal(map.getSelectedNodes().length, 2);
+    map.appMouseUp({ button: 0 });
+});
+
+test('batch copy excludes selected descendants and paste/undo/redo retains separate ordered subtrees', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), child = add(map, a, 'A-child'), b = add(map, map.root, 'B');
+    a.collapse();
+    map.setSelectedNodes([b, child, a]); // Selection order differs from outline order.
+    const text = map.copyNode();
+    const payload = JSON.parse(text);
+    assert.equal(payload.type, 'copyNodes');
+    assert.deepEqual(Array.from(payload.text, node => node.text), ['A', 'A-child', 'B']);
+    const other = keyboardFixture();
+    other.pasteNode(text);
+    assert.equal(other.root.children.length, 2);
+    assert.equal(other.root.children[0].isExpand, false);
+    assert.equal(other.root.children[0].children[0].data.text, 'A-child');
+    assert.equal(other.exec.history.undos.length, 1);
+    other.root.children[1].select();
+    press(other, 'z', { ctrlKey: true });
+    assert.equal(other.root.children.length, 0);
+    assert.equal(other.selectNode, other.root);
+    press(other, 'y', { ctrlKey: true });
+    assert.deepEqual(other.root.children.map(node => node.data.text), ['A', 'B']);
+    other.pasteNode(text);
+    assert.equal(new Set(other.root.children.map(node => node.getId())).size, 4);
+});
+
+test('batch Delete treats parent plus child once and restores all original sibling indexes in one undo', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), child = add(map, a, 'A-child'), keep = add(map, map.root, 'Keep'), b = add(map, map.root, 'B');
+    map.setSelectedNodes([child, b, a]);
+    press(map, 'Delete');
+    assert.deepEqual(map.root.children.map(node => node.data.text), ['Keep']);
+    assert.equal(map.exec.history.undos.length, 1);
+    press(map, 'z', { ctrlKey: true });
+    assert.deepEqual(map.root.children.map(node => node.data.text), ['A', 'Keep', 'B']);
+    assert.equal(a.children[0], child);
+    assert.equal(map.getSelectedNodes().length, 2);
+    press(map, 'y', { ctrlKey: true });
+    assert.equal(map.root.children[0], keep);
+});
+
+test('batch reparent keeps order and child subtrees, with a single undo and cycle rejection', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), child = add(map, a, 'A-child'), b = add(map, map.root, 'B'), target = add(map, map.root, 'Target');
+    target.collapse();
+    map.setSelectedNodes([b, child, a]);
+    map.execute('moveNodes', { nodes: map.getSelectedRoots(), dropNode: target, type: 'child-left' });
+    assert.deepEqual(target.children.map(node => node.data.text), ['A', 'B']);
+    assert.equal(a.children[0], child);
+    assert.equal(a.direct, 'left');
+    assert.equal(target.isExpand, true);
+    assert.equal(map.exec.history.undos.length, 1);
+    press(map, 'z', { ctrlKey: true });
+    assert.deepEqual(map.root.children.map(node => node.data.text), ['A', 'B', 'Target']);
+    assert.equal(target.isExpand, false);
+    map.execute('moveNodes', { nodes: [a, child], dropNode: child, type: 'child' });
+    assert.equal(map.exec.history.undos.length, 0);
+    assert.equal(map.exec.history.redos.length, 1); // Invalid move must preserve redo.
+    press(map, 'y', { ctrlKey: true });
+    assert.equal(target.children.length, 2);
+});
+
+test('batch sibling move within the same parent computes insertion after removing selected siblings', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), keep = add(map, map.root, 'Keep'), b = add(map, map.root, 'B'), tail = add(map, map.root, 'Tail');
+    map.execute('moveNodes', { nodes: [a, b], dropNode: tail, type: 'down' });
+    assert.deepEqual(map.root.children.map(node => node.data.text), ['Keep', 'Tail', 'A', 'B']);
+    press(map, 'z', { ctrlKey: true });
+    assert.deepEqual(map.root.children.map(node => node.data.text), ['A', 'Keep', 'B', 'Tail']);
+    assert.equal(map.root.children[1], keep);
+});
+
+test('dragging any selected node carries only top-level selected roots through dragstart and drop', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), child = add(map, a, 'A-child'), b = add(map, map.root, 'B'), target = add(map, map.root, 'Target');
+    map.setSelectedNodes([child, b, a]);
+    const element = node => ({ getAttribute: () => node.getId() });
+    const eventTarget = node => ({ closest: selector => selector === '.mm-node' ? element(node) : null });
+    let clipboardText;
+    const transfer = { files: [], setData: (_, text) => { clipboardText = text; } };
+    map.appMouseDown({ button: 0, target: eventTarget(child) });
+    assert.equal(map.getSelectedNodes().length, 3);
+    map.appDragstart({ target: eventTarget(child), dataTransfer: transfer, pageX: 10, pageY: 10, stopPropagation() {}, preventDefault() { throw new Error('Unexpected drag rejection'); } });
+    assert.equal(map._dragNodes.length, 2);
+    assert.equal(JSON.parse(clipboardText).text.length, 3);
+    map.appMouseMove({ target: { closest: () => null }, offsetX: 25, offsetY: 35, pageX: 50, pageY: 60 });
+    assert.equal(map.containerEL.scrollLeft, 15); // Node dragging must never pan the canvas.
+    map._getDragType = () => 'child';
+    map.appDrop({ target: eventTarget(target), dataTransfer: transfer, clientX: 50, clientY: 50, preventDefault() {} });
+    assert.deepEqual(target.children.map(node => node.data.text), ['A', 'B']);
+    assert.equal(map.exec.history.undos.length, 1);
+    press(map, 'z', { ctrlKey: true });
+    assert.equal(a.parent, map.root);
+    assert.equal(child.parent, a);
+});
+
+test('Ctrl-drag copies the selected forest and protects root/self drops without altering the original', () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A'), child = add(map, a, 'A-child'), b = add(map, map.root, 'B'), target = add(map, map.root, 'Target');
+    map.setSelectedNodes([a, child, b]);
+    map._dragNodes = map.getSelectedRoots(); map.drag = true;
+    map.appDrop({ target: { closest: () => ({ getAttribute: () => target.getId() }) }, dataTransfer: { files: [] }, ctrlKey: true, preventDefault() {} });
+    assert.equal(map.root.children.length, 3);
+    assert.equal(target.children.length, 2);
+    assert.notEqual(target.children[0].getId(), a.getId());
+    assert.equal(target.children[0].children[0].data.text, child.data.text);
+    press(map, 'z', { ctrlKey: true });
+    assert.equal(target.children.length, 0);
+    map._dragNodes = [a]; map.drag = true;
+    map.appDrop({ target: { closest: () => ({ getAttribute: () => child.getId() }) }, dataTransfer: { files: [] }, preventDefault() {} });
+    assert.equal(child.parent, a);
+    assert.equal(map.exec.history.undos.length, 0);
+    map.root.data.isRoot = true;
+    map.setSelectedNodes([map.root, child]);
+    press(map, 'Delete');
+    assert.equal(map.root.children.length, 3);
 });
 
 test('Ctrl+Z after a paste removes the complete subtree through real Exec/History, and redo restores it', () => {
