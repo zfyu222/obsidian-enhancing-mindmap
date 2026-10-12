@@ -312,7 +312,7 @@ export default class MindMap {
         this.appEl.addEventListener('dragend', this.appDragend);
         this.appEl.addEventListener('drop', this.appDrop);
         document.addEventListener('keyup', this.appKeyup);
-        document.addEventListener('keydown', this.appKeydown);
+        document.addEventListener('keydown', this.appKeydown, true);
         document.addEventListener('compositionstart',this.compositionStart)
         document.addEventListener('compositionend',this.compositionEnd)
         document.body.addEventListener('mousewheel', this.appMousewheel);
@@ -342,7 +342,7 @@ export default class MindMap {
         this.appEl.removeEventListener('mouseover', this.appMouseOverFn);
         this.appEl.removeEventListener('drop', this.appDrop);
         document.removeEventListener('keyup', this.appKeyup);
-        document.removeEventListener('keydown', this.appKeydown);
+        document.removeEventListener('keydown', this.appKeydown, true);
         document.removeEventListener('compositionstart',this.compositionStart)
         document.removeEventListener('compositionend',this.compositionEnd)
 
@@ -394,85 +394,67 @@ export default class MindMap {
         this.isFocused = false;
     }
     appKeydown(e: KeyboardEvent) {
-        if (!this.isFocused) return; // Check if Mindmap is in focus or not
-        const action = clipboardAction(e, !!(this.selectNode?.data.isEdit || this.editNode?.data.isEdit));
-        if (action && this.selectNode && this.view?.app.workspace.getActiveViewOfType(MindMapView) === this.view) {
+        if (!this.view || this.view.app.workspace.getActiveViewOfType(MindMapView) !== this.view) return;
+        const target = e.target as HTMLElement;
+        if (target ? !this.containerEL.contains(target) : !this.isFocused) return;
+        if (e.defaultPrevented || this.isComposing || e.isComposing || e.keyCode === 229 || e.key === 'Process') return;
+        const node = this.selectNode;
+        const editing = !!(node?.data.isEdit || this.editNode?.data.isEdit);
+        const textTarget = target && (target.isContentEditable ||
+            (typeof target.closest === 'function' && target.closest('input, textarea, [contenteditable="true"]')));
+        // Only Enter/Tab in this node's editor may finish editing. Other text fields are native.
+        if (textTarget && !(editing && node?.contentEl.contains(target))) return;
+        const consume = () => {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
+        };
+        const action = clipboardAction(e, editing);
+        if (action && node) {
+            consume();
             if (action === 'copy') void this.copyToClipboard();
             else void this.pasteFromClipboard();
             return;
         }
-        var keyCode = e.keyCode || e.which || e.charCode;
-        var ctrlKey = e.ctrlKey || e.metaKey;
-        var shiftKey = e.shiftKey;
-        var altKey = e.altKey;
-
-        // if (ctrlKey) {                         // Shift -> Selecting
-        //     // ctrl -> selecting
-        //     this.selectingNodes = true;
-        // } else {
-        //     this.selectingNodes = false;
-        // }
-
-        if (!ctrlKey && !shiftKey && !altKey) { // No special key
-            // // tab
-            // // tab (OK) / Insert (OK)
-            // if (keyCode == 9 || keyCode == 45) {
-            //     e.preventDefault();
-            //     e.stopPropagation();
-            // }
-
-            // // Space
-            // if (keyCode == 32) {
-            //     var node = this.selectNode;
-            //     if (node && !node.data.isEdit) {
-            //         e.preventDefault();
-            //         e.stopPropagation();
-            //         node.edit();
-            //         this._menuDom.style.display = 'none';
-            //     }
-            // }
-
-
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.altKey && !editing) {
+            if (key === 'z' || (key === 'y' && !e.shiftKey)) {
+                consume();
+                if (key === 'y' || e.shiftKey) this.redo();
+                else this.undo();
+            }
+            return;
         }
-
-
-        if (ctrlKey && !shiftKey && !altKey) {  // CTRL key
-        //     //ctrl + y
-        //     if (keyCode == 89) {
-        //         e.preventDefault();
-        //         e.stopPropagation();
-        //         this.redo();
-        //     }
-
-        //     //ctrl + z
-        //     if (keyCode == 90) {
-        //         e.preventDefault();
-        //         e.stopPropagation();
-        //         this.undo();
-        //     }
+        if (mod || e.altKey || e.shiftKey || !node) return;
+        if (key === 'tab' || key === 'insert' || key === 'enter') {
+            consume();
+            if (editing) {
+                node.cancelEdit();
+                this.editNode = null;
+                node.select();
+                return;
+            }
+            if (key === 'enter') {
+                if (!node.parent) return;
+                this.execute('addSiblingNode', {
+                    parent: node.parent,
+                    index: node.parent.children.indexOf(node) + 1
+                });
+            } else {
+                if (!node.isExpand) node.expand();
+                this.execute('addChildNode', { parent: node });
+            }
+            this._menuDom.style.display = 'none';
+        } else if (!editing && key === ' ') {
+            consume();
+            node.edit();
+            this._menuDom.style.display = 'none';
+        } else if (!editing && (key === 'delete' || key === 'backspace') && !node.data.isRoot) {
+            consume();
+            this.execute('deleteNodeAndChild', { node });
+            this._menuDom.style.display = 'none';
         }
-
-            // Shift + F2 : Edit as space does
-        // if (!ctrlKey && shiftKey && !altKey) {  // SHIFT key
-        //     if (keyCode == 113) {
-        //     // if (keyCode == 45) {
-        //         var node = this.selectNode;
-        //         if (node && !node.data.isEdit) {
-        //             e.preventDefault();
-        //             e.stopPropagation();
-        //             if (!node.isExpand) {
-        //                 node.expand();
-        //             }
-        //             if (!node.parent) return;
-        //             node.mindmap.execute('addSiblingNode', {
-        //                 parent: node.parent
-        //             });
-        //             this._menuDom.style.display='none';
-        //         }
-        //     }
-        // }
     }
 
      compositionStart(e: KeyboardEvent) {

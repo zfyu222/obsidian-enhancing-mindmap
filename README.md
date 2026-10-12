@@ -8,7 +8,7 @@ The plugin ID is unchanged, so this fork replaces an existing installation of
 Enhancing Mindmap in the same vault.
 
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
-run `npm ci --ignore-scripts`, `npm test` and `npm run build`, then commit and push.
+run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.
 Push a tag matching the version exactly, without a `v` prefix. The release
 workflow validates versions, tests, builds and uploads BRAT assets; tags with
 a prerelease suffix are published as prereleases. Compiled `main.js` remains
@@ -76,6 +76,12 @@ Ctrl/Cmd+V to insert a copy of the entire subtree as its child. You can paste
 repeatedly or into another mind map. While editing text, these shortcuts keep
 their normal text clipboard behavior. Alt+Shift+C/V commands remain available.
 Each paste is one undoable operation.
+
+Node shortcuts are handled in the active mind map before default browser actions:
+Tab/Insert adds a child, Enter adds a sibling immediately after the selected node,
+and either key finishes node text editing. Shift+Enter keeps multiline text entry.
+Ctrl/Cmd+Z undoes node operations (including an entire pasted subtree);
+Ctrl/Cmd+Y and Ctrl/Cmd+Shift+Z redo them. While editing text, text undo remains native.
 
 ## Features
 

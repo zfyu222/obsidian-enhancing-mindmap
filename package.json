@@ -1,12 +1,13 @@
 {
   "name": "obsidian-sample-plugin",
-  "version": "0.2.6-beta.1",
+  "version": "0.2.6-beta.2",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
     "dev": "rollup --config rollup.config.js -w",
     "build": "rollup --config rollup.config.js --environment BUILD:production",
-    "test": "node --test tests/*.test.cjs"
+    "test": "node --test tests/*.test.cjs",
+    "test:bundle": "node tests/bundle-smoke.cjs"
   },
   "keywords": [],
   "author": "",

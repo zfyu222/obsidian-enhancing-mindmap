@@ -25,6 +25,7 @@ interface DataProps {
 
     // Add command to history
     inHistory?:boolean,
+    index?:number,
 
     data?:any
 };
@@ -43,7 +44,9 @@ export default class Exec{
                     }
                     var parent:INode = data.parent;
                     var node = new INode(d,parent.mindmap);
-                    this.history.execute(new cmd.AddNode(node, data.parent, parent.mindmap));
+                    const command = new cmd.AddNode(node, data.parent, parent.mindmap);
+                    if (data.index !== undefined) command.index = data.index;
+                    this.history.execute(command);
                     l_return = node;
                 }
                 break;

@@ -334,6 +334,15 @@ export class ExpandNode extends Command{
 
     undo() {
         if (this.firstNode) {
+            let selected = this.mind.selectNode;
+            while (selected) {
+                if (selected === this.firstNode) {
+                    this.mind.clearSelectNode();
+                    this.node.select();
+                    break;
+                }
+                selected = selected.parent;
+            }
             this.mind.removeNode(this.firstNode);
             if (!this.wasExpanded) this.node.collapse();
             this.node.clearCacheData();

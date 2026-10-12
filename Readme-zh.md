@@ -56,6 +56,9 @@ mindmap-plugin: basic
 支持重复粘贴和跨思维导图粘贴；编辑文字时仍使用普通文字复制粘贴。
 原有 Alt+Shift+C/V 命令仍可使用，每次子树粘贴可以整体撤销和重做。
 
+Tab/Insert 添加子节点，Enter 在选中节点后添加同级节点；编辑节点文字时，Tab/Enter 完成编辑，Shift+Enter 换行。
+Ctrl/Cmd+Z 撤销节点操作（包括整棵粘贴的子树），Ctrl/Cmd+Y 或 Ctrl/Cmd+Shift+Z 重做；文字编辑期间保留原生文字撤销。
+
 本 fork 由 [OBSB 项目](https://github.com/zfyu222/OBSB)维护。
 通过 BRAT 添加 `zfyu222/obsidian-enhancing-mindmap`，选择最新 Release 或指定测试版安装。
 插件 ID 保持不变，同一知识库中会替换原版 Enhancing Mindmap。

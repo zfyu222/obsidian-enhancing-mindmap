@@ -25,8 +25,18 @@ class Node {
     clearCacheData() {}
     setPosition() {}
     refreshBox() {}
+    select() { this.mindmap.selectNode = this; }
+    unSelect() {}
+    edit() { this.data.isEdit = true; this.mindmap.editNode = this; }
+    cancelEdit() { this.data.isEdit = false; }
 }
-const { PasteNode } = load('src/mindmap/Cmds.ts', { './INode': { default: Node } });
+const commands = load('src/mindmap/Cmds.ts', { './INode': { default: Node } });
+const { PasteNode } = commands;
+const history = load('src/mindmap/History.ts');
+const { default: Exec } = load('src/mindmap/Execute.ts', {
+    './History': history, './Cmds': commands, './INode': { default: Node },
+    '../MindMapView': { uuid: id }, '../lang/helpers': { t: text => text }
+});
 const { default: MindMap } = load('src/mindmap/mindmap.ts', {
     './clipboard': clipboard, '../MindMapView': { uuid: id }, './INode': { default: Node }
 });
@@ -96,7 +106,7 @@ test('only the active map handles node clipboard keyboard shortcuts', () => {
     let active = map.view = { app: { workspace: { getActiveViewOfType: () => active } } };
     let copies = 0;
     map.copyToClipboard = () => { copies++; };
-    const event = { key: 'c', ctrlKey: true, target: null, preventDefault() {}, stopPropagation() {} };
+    const event = { key: 'c', ctrlKey: true, target: null, preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} };
     map.appKeydown(event);
     assert.equal(copies, 1);
     active = {};
@@ -106,6 +116,126 @@ test('only the active map handles node clipboard keyboard shortcuts', () => {
     map.selectNode.data.isEdit = true;
     map.appKeydown(event);
     assert.equal(copies, 1);
+});
+
+function keyboardFixture() {
+    const map = fixture();
+    map.isFocused = true;
+    map.view = { app: { workspace: { getActiveViewOfType: () => map.view } } };
+    map._menuDom = { style: {} };
+    map.containerEL = { contains: () => true };
+    map.exec = new Exec();
+    map.execute = MindMap.prototype.execute;
+    map.addNode = (n, parent, index = -1) => {
+        parent.children.splice(index < 0 ? parent.children.length : index, 0, n);
+        n.parent = parent;
+    };
+    map.removeNode = n => {
+        const index = n.parent.children.indexOf(n);
+        n.parent.children.splice(index, 1);
+        return index;
+    };
+    return map;
+}
+function press(map, key, props = {}) {
+    const event = { key, keyCode: key === 'Tab' ? 9 : key === 'Enter' ? 13 : 0, target: null,
+        preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, stopImmediatePropagation() {}, ...props };
+    map.appKeydown(event);
+    map.appKeyup({ ...event, defaultPrevented: false });
+    return event;
+}
+const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+test('Tab creates one child through real history and Enter inserts one adjacent sibling', async () => {
+    const map = keyboardFixture();
+    map.root.collapse();
+    assert.equal(press(map, 'Tab').defaultPrevented, true);
+    assert.equal(map.root.children.length, 1);
+    assert.equal(map.root.isExpand, true);
+    assert.equal(map.exec.history.undos.length, 1);
+    await nextTick();
+    const child = map.selectNode;
+    assert.equal(child.data.isEdit, true);
+    press(map, 'Enter'); // Finish editing, without creating a second node.
+    assert.equal(child.data.isEdit, false);
+    assert.equal(map.root.children.length, 1);
+    const tail = new Node({ id: 'tail', text: 'Tail' }, map);
+    map.addNode(tail, map.root);
+    press(map, 'Enter');
+    assert.equal(map.root.children.length, 3);
+    assert.equal(map.root.children[0], child);
+    assert.equal(map.root.children[2], tail);
+    assert.equal(map.exec.history.undos.length, 2);
+    await nextTick();
+});
+
+test('Ctrl+Z after a paste removes the complete subtree through real Exec/History, and redo restores it', () => {
+    const map = keyboardFixture();
+    map.pasteNode(clipboard.serializeSubtree(source()));
+    assert.equal(map.exec.history.undos.length, 1);
+    map.root.children[0].children[0].children[0].select();
+    assert.equal(press(map, 'z', { ctrlKey: true }).defaultPrevented, true);
+    assert.equal(map.root.children.length, 0);
+    assert.equal(map.selectNode, map.root);
+    press(map, 'y', { ctrlKey: true });
+    assert.equal(map.root.children[0].children[0].children[0].data.text, 'Grandchild');
+    press(map, 'z', { metaKey: true });
+    assert.equal(map.root.children.length, 0);
+    press(map, 'z', { metaKey: true, shiftKey: true });
+    assert.equal(map.root.children.length, 1);
+});
+
+test('Tab finishes node editing once; native text undo and modified Enter/Tab remain untouched', () => {
+    const map = keyboardFixture();
+    let finishes = 0;
+    map.root.cancelEdit = () => { finishes++; map.root.data.isEdit = false; };
+    map.root.edit();
+    const editor = { isContentEditable: true };
+    map.root.contentEl = { contains: target => target === editor };
+    assert.equal(press(map, 'z', { ctrlKey: true, target: editor }).defaultPrevented, undefined);
+    assert.equal(press(map, 'Enter', { shiftKey: true, target: editor }).defaultPrevented, undefined);
+    assert.equal(press(map, 'Tab', { target: editor }).defaultPrevented, true);
+    assert.equal(finishes, 1);
+    assert.equal(map.editNode, null);
+    assert.equal(map.root.children.length, 0);
+    assert.equal(press(map, 'Tab', { shiftKey: true }).defaultPrevented, undefined);
+});
+
+test('IME confirmation, inactive maps, and other input fields do not create nodes or undo', () => {
+    const map = keyboardFixture();
+    press(map, 'Enter', { isComposing: true });
+    press(map, 'Enter', { keyCode: 229 });
+    map.isComposing = true;
+    press(map, 'Tab');
+    map.isComposing = false;
+    press(map, 'Tab', { target: { closest: () => ({}) } });
+    press(map, 'z', { ctrlKey: true, target: { closest: () => ({}) } });
+    map.containerEL.contains = () => false;
+    press(map, 'Tab', { target: {} });
+    press(map, 'z', { ctrlKey: true, target: {} });
+    map.view.app.workspace.getActiveViewOfType = () => ({});
+    press(map, 'Tab');
+    press(map, 'Enter');
+    press(map, 'z', { ctrlKey: true });
+    assert.equal(map.root.children.length, 0);
+    assert.equal(map.exec.history.undos.length, 0);
+});
+
+test('restored Space and Delete shortcuts use node editing and history', async () => {
+    const map = keyboardFixture();
+    map.root.data.isRoot = true;
+    press(map, 'Delete');
+    assert.equal(map.exec.history.undos.length, 0);
+    press(map, 'Tab');
+    await nextTick();
+    press(map, 'Tab'); // Finish editor.
+    press(map, ' ');
+    assert.equal(map.selectNode.data.isEdit, true);
+    press(map, 'Enter');
+    press(map, 'Delete');
+    assert.equal(map.root.children.length, 0);
+    press(map, 'z', { ctrlKey: true });
+    assert.equal(map.root.children.length, 1);
 });
 test('ordinary text, invalid topology, duplicate IDs and missing destination leave the map intact', () => {
     const map = fixture();
