@@ -7,10 +7,10 @@ beta tag). Releases contain the compiled `main.js`, `manifest.json` and `styles.
 The plugin ID is unchanged, so this fork replaces an existing installation of
 Enhancing Mindmap in the same vault.
 
-Development branch: deleting all text keeps an empty node and its children.
+Since 0.2.6-beta.4, deleting all text keeps an empty node and its children.
 Empty headings/list items remain ordinary Markdown and survive reopening,
 including collapsed nodes. Text changes support undo/redo; empty nodes retain
-a minimum clickable size. This change is not included in beta.3.
+a minimum clickable size. Update through BRAT to beta.4 or later.
 
 For releases, update `manifest.json`, `package.json` and `versions.json` together,
 run `npm ci --ignore-scripts`, `npm test`, `npm run build` and `npm run test:bundle`, then commit and push.
