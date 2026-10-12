@@ -343,6 +343,12 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>extractSummaries(testMap.getMarkdown()).entries.length),4);
         const boxes=await page.evaluate(()=>testMap.summaries.items.map(s=>{const nodes=[];testMap.traverseDF(n=>{if(n.isShow())nodes.push(n)},s.root);return testMap.getBoundingRect(nodes)}));
         for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++)assert.ok(boxes[i].right<=boxes[j].x || boxes[j].right<=boxes[i].x || boxes[i].bottom<=boxes[j].y || boxes[j].bottom<=boxes[i].y,'Summary subtrees must not collide');
+        const localAnchor = await page.evaluate(()=>{
+            const summary=testMap.summaries.items[0], other=testNodes.target, old=other.getBox();
+            const before=summary.root.getBox().x;other.setPosition(2500,950);testMap.refresh();
+            const after=summary.root.getBox().x;other.setPosition(old.x,old.y);testMap.refresh();return {before,after};
+        });
+        assert.equal(localAnchor.after,localAnchor.before,'An unrelated far-right branch must not widen the summary gap');
         await page.screenshot({path:path.join(screenshotDir,'summaries.png')});
         await page.evaluate(()=>{
             const parsed=extractSummaries(testMap.getMarkdown());
@@ -355,8 +361,14 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             [testNodes.a,testNodes.b,testNodes.target].forEach((n,i)=>{n.direct='left';n.setPosition(1700,100+i*180);n.children.forEach(child=>child.setPosition(1500,100+i*180));});
             testMap.refresh();
         });
-        const leftBounds=await page.evaluate(()=>testMap.summaries.items.map(s=>s.root.getBox()));
-        assert.ok(leftBounds.every(b=>b.x<1500));
+        const leftBounds=await page.evaluate(()=>testMap.summaries.items.map(s=>{const nodes=[];s.memberIds.forEach(id=>testMap.traverseDF(n=>{if(n.isShow())nodes.push(n)},testMap.getNodeById(id)));return {root:s.root.getBox(),anchor:testMap.getBoundingRect(nodes).x};}));
+        assert.ok(leftBounds.every(b=>b.root.x+b.root.width<b.anchor));
+        const leftAnchor = await page.evaluate(()=>{
+            const summary=testMap.summaries.items[0], other=testNodes.target, old=other.getBox();
+            const before=summary.root.getBox().x;other.setPosition(-2000,950);testMap.refresh();
+            const after=summary.root.getBox().x;other.setPosition(old.x,old.y);testMap.refresh();return {before,after};
+        });
+        assert.equal(leftAnchor.after,leftAnchor.before,'An unrelated far-left branch must not widen the summary gap');
         await page.screenshot({path:path.join(screenshotDir,'summaries-left.png')});
 
         await page.evaluate(()=>{testMap.root.collapse();testMap.refresh();});

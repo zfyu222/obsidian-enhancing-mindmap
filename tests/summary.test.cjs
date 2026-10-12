@@ -107,3 +107,18 @@ test('multiline main content and literal block IDs in code survive without becom
  const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{}},'./markmapLib/markmap-lib':parser,'./summary/markdown':markdown}).MindMapView;
  for(const level of [1,2]){map.setting.headLevel=level;const data=View.prototype.mdToData.call({},markdown.extractSummaries(map.getMarkdown()).main);assert.equal(data.children[0].text,a.data.text);assert.equal(data.children[1].text,b.data.text);assert.equal(data.children[1].expanded,true);}
 });
+
+function layoutFixture(side='right') {
+ const f=fixture(),{map,a,b,c}=f;
+ map.summaries.svg={clear(){},path(){return {fill(){return this},stroke(){return this},addClass(){},node:{setAttribute(){},addEventListener(){}}}}};
+ map.root.setPosition(side==='right'?0:1200,0);
+ [a,b,c].forEach(n=>n.direct=side);
+ a.setPosition(side==='right'?100:1000,100);b.setPosition(side==='right'?100:1000,500);c.setPosition(side==='right'?2000:-2000,800);
+ map.setSelectedNodes([a]);map.summaries.create();map.finishEditingForHistory();return f;
+}
+test('summary stays near its own visible subtree despite an unrelated long branch on either side',()=>{
+ for(const side of ['right','left']){const {map,a,c}=layoutFixture(side);map.summaries.layout();const root=map.summaries.items[0].root;const gap=side==='right'?root.box.x-(a.box.x+a.box.width):a.box.x-(root.box.x+root.box.width);assert.equal(gap,48);const before=root.box.x;c.setPosition(side==='right'?6000:-6000,800);map.summaries.layout();assert.equal(root.box.x,before);}
+});
+test('summary moves outward for real collisions and rechecks after hitting further obstacles',()=>{
+ for(const side of ['right','left']){const {map,b,c}=layoutFixture(side);b.setPosition(side==='right'?250:850,100);c.setPosition(side==='right'?450:650,100);map.summaries.layout();const root=map.summaries.items[0].root;assert.equal(root.box.x,side==='right'?598:502);}
+});

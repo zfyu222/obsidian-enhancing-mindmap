@@ -151,7 +151,8 @@ export default class SummaryManager {
         this.mount(); this.svg.clear();
         const originals: any[]=[]; this.map.traverseDF((n:any)=>{if(n.isShow())originals.push(n);});
         if(!originals.length)return;
-        const global = this.map.getBoundingRect(originals); const occupied: any[]=[];
+        const occupied: any[]=[];
+        const obstacles = originals.map(node => ({ ...this.map.getBoundingRect([node]), gap: 16 }));
         const walk = (node:any, visible:boolean, side:string) => { node.direct=side; visible?node.show():node.hide(); node.children.forEach((n:any)=>walk(n,visible && node.isExpand,side)); };
         const measure = (node:any):any => {
             const box=node.getBox(); const children=node.isExpand?node.children.map(measure):[];
@@ -172,15 +173,31 @@ export default class SummaryManager {
             const included:any[]=[]; members.forEach((n:any)=>this.map.traverseDF((child:any)=>{if(child.isShow())included.push(child);},n));
             const bounds=this.map.getBoundingRect(included), tree=measure(item.root);
             const top=bounds.y-8,bottom=bounds.y+bounds.height+8, mid=(top+bottom)/2;
-            const y=mid-tree.height/2; let x=side==='right'?global.right+28:global.x-28;
-            occupied.filter(b=>b.side===side && Math.min(top,y)<b.bottom+20 && Math.max(bottom,y+tree.height)>b.y-20).forEach(b=>{x=side==='right'?Math.max(x,b.right+32):Math.min(x,b.x-32);});
+            const y=mid-tree.height/2; let x=side==='right'?bounds.right+28:bounds.x-28;
+            // Anchor to these members, not the farthest unrelated branch in the map.
+            // Move outward only when the brace/subtree footprint actually intersects an obstacle.
+            const blockers = [...obstacles, ...occupied];
+            const regionTop = Math.min(top,y), regionBottom = Math.max(bottom,y+tree.height);
+            let shifted: boolean;
+            do {
+                shifted = false;
+                blockers.forEach(blocker => {
+                    const left = side==='right'?x-12:x-20-tree.width;
+                    const right = side==='right'?x+20+tree.width:x+12;
+                    if (regionTop < blocker.bottom+blocker.gap && regionBottom > blocker.y-blocker.gap &&
+                        left < blocker.right+blocker.gap && right > blocker.x-blocker.gap) {
+                        const next = side==='right'?blocker.right+blocker.gap+12:blocker.x-blocker.gap-12;
+                        if (side==='right'?next>x:next<x) { x=next; shifted=true; }
+                    }
+                });
+            } while (shifted);
             const s=side==='right'?1:-1;
             const path=this.svg.path(`M ${x-s*12} ${top} Q ${x} ${top} ${x} ${top+16} L ${x} ${bottom-16} Q ${x} ${bottom} ${x-s*12} ${bottom} M ${x} ${mid} L ${x+s*20} ${mid}`).fill('none').stroke({color:'var(--text-normal)',width:1.8});
             path.addClass('mm-summary-bracket'); path.node.setAttribute('data-summary-id',item.id);
             path.node.addEventListener('mousedown',(event:MouseEvent)=>{event.preventDefault();event.stopPropagation();this.map.setSelectedNodes([item.root]);});
             path.node.addEventListener('click',(event:MouseEvent)=>{event.preventDefault();event.stopPropagation();this.map.setSelectedNodes([item.root]);});
             arrange(tree,x+s*20,y,side);
-            occupied.push({x:side==='right'?x:x-20-tree.width,right:side==='right'?x+20+tree.width:x,y:Math.min(top,y),bottom:Math.max(bottom,y+tree.height),side});
+            occupied.push({x:side==='right'?x-12:x-20-tree.width,right:side==='right'?x+20+tree.width:x+12,y:regionTop,bottom:regionBottom,gap:20});
         });
     }
     clear(){ this.all(n=>n.containEl.remove());this.items=[];this.svg.clear(); }
