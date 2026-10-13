@@ -1,5 +1,6 @@
 import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
+import TextFormatMenu from './text-format'
 import Layout from './Layout'
 import { Notice, Platform } from 'obsidian'
 import SVG from 'svg.js'
@@ -83,6 +84,7 @@ export default class MindMap {
     isFocused = true;
     summaries?: SummaryManager;
     summaryTransaction = false;
+    textFormatMenu?: TextFormatMenu;
 
     constructor(data: INodeData, containerEL: HTMLElement, setting?: Setting) {
         this.setting = Object.assign({
@@ -1922,6 +1924,13 @@ export default class MindMap {
         if (this._panning || Date.now() < this._suppressContextUntil) {
             evt.preventDefault();
             evt.stopImmediatePropagation();
+            return;
+        }
+        if (!this.isNodeEditorTarget(evt.target)) { this.textFormatMenu?.close(); return; }
+        if (!this.textFormatMenu) this.textFormatMenu = new TextFormatMenu(this);
+        if (this.textFormatMenu.show(evt)) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
         }
     }
 
@@ -1989,6 +1998,7 @@ export default class MindMap {
     }
 
     clear() {
+        this.textFormatMenu?.close();
         this.summaries?.clear();
         this.clearNode();
         this.removeEvent();
@@ -2170,6 +2180,7 @@ export default class MindMap {
     }
 
     undo() {
+        this.textFormatMenu?.close();
         this.finishEditingForHistory();
         this.exec.undo();
         this.emit('toolbarChange');
@@ -2178,6 +2189,7 @@ export default class MindMap {
     }
 
     redo() {
+        this.textFormatMenu?.close();
         this.finishEditingForHistory();
         this.exec.redo();
         this.emit('toolbarChange');

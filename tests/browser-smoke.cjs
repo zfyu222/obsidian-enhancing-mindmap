@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END'];
+const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -84,7 +84,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,extractSummaries});
+            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,extractSummaries,editorSelection,selectEditorOffsets});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -405,6 +405,66 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.summaries.items.length),0);
         assert.equal(await page.evaluate(()=>testMap.getMarkdown().includes('mm:node')),false);
         await tool('undo').click();assert.equal(await page.evaluate(()=>testMap.summaries.items.length),4);
+        // Text-format menu operates on the native contenteditable selection.
+        await page.evaluate(()=>{
+            testMap.finishEditingForHistory();testMap.exec.history.clear();testMap.containerEL.scrollLeft=0;testMap.containerEL.scrollTop=0;
+            const n=testNodes.target;n.setPosition(220,160);n.setText('Alpha beta gamma');testMap.setSelectedNodes([n]);n.edit();
+        });
+        const openTextMenu=async()=>{
+            // Allow focus-induced native scrolling to settle before opening a fixed menu.
+            await page.waitForTimeout(60);
+            const position=await page.evaluate(()=>{const b=getSelection().getRangeAt(0).getClientRects()[0];return {x:b.x+b.width/2,y:b.y+b.height/2};});
+            await page.mouse.click(position.x,position.y,{button:'right'});
+            await page.waitForSelector('.mm-text-format-menu');
+        };
+        const formatButton=id=>page.locator('.mm-text-format-menu button[data-format="'+id+'"]');
+        await page.evaluate(()=>selectEditorOffsets(testNodes.target.contentEl,6,10));
+        await openTextMenu();assert.equal(await page.evaluate(()=>getSelection().toString()),'beta');
+        await page.screenshot({path:path.join(screenshotDir,'text-format-menu.png')});
+        await formatButton('bold').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.contentEl.innerText==='Alpha **beta** gamma');
+        assert.equal(await page.evaluate(()=>getSelection().toString()),'beta');
+        assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),1);
+        await openTextMenu();await formatButton('#e53935').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.contentEl.innerText.includes('color:#e53935'));
+        assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha **<span style="color:#e53935">beta</span>** gamma');
+        assert.ok(await page.evaluate(()=>testMap.getMarkdown().includes('color:#e53935')));
+        await openTextMenu();await formatButton('default').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.data.text==='Alpha **beta** gamma');
+        await openTextMenu();await formatButton('bold').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.data.text==='Alpha beta gamma');
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha **beta** gamma');
+        await page.keyboard.press('Control+y');assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha beta gamma');
+        await page.evaluate(()=>{testMap.exec.history.clear();const n=testNodes.target;testMap.setSelectedNodes([n]);n.edit();});
+        await page.keyboard.type(' delta');
+        await page.evaluate(()=>selectEditorOffsets(testNodes.target.contentEl,6,10));
+        await openTextMenu();await formatButton('bold').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.data.text==='Alpha **beta** gamma delta');
+        assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),2);
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha beta gamma delta');
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha beta gamma');
+        await page.keyboard.press('Control+y');await page.keyboard.press('Control+y');assert.equal(await page.evaluate(()=>testNodes.target.data.text),'Alpha **beta** gamma delta');
+        // Real multiline DOM offsets include line breaks, and formatting commits a prior draft separately.
+        await page.evaluate(()=>{const n=testNodes.target;testMap.setSelectedNodes([n]);n.setText('First line\nSecond line\nThird line');n.edit();selectEditorOffsets(n.contentEl,6,17);});
+        assert.deepEqual(await page.evaluate(()=>{const s=editorSelection(testNodes.target.contentEl);return {start:s.start,end:s.end,selected:s.text.slice(s.start,s.end)};}),{start:6,end:17,selected:'line\nSecond'});
+        await openTextMenu();await page.keyboard.press('Escape');assert.equal(await page.locator('.mm-text-format-menu').count(),0);
+        assert.equal(await page.evaluate(()=>testNodes.target.data.isEdit),true);
+        await openTextMenu();await formatButton('italic').click();
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.data.text==='First *line\nSecond* line\nThird line');
+        await openTextMenu();await page.locator('.mm-text-custom-color input').evaluate(el=>{el.value='#00ffaa';el.dispatchEvent(new Event('change',{bubbles:true}));});
+        await page.waitForFunction(()=>testNodes.target.data.isEdit && testNodes.target.data.text.includes('color:#00ffaa'));
+        // No selection / IME retain native context behavior.
+        await page.evaluate(()=>selectEditorOffsets(testNodes.target.contentEl,0,0));
+        await page.locator('[data-id="member-2"] .mm-node-content').click({button:'right'});
+        assert.equal(await page.locator('.mm-text-format-menu').count(),0);
+        await page.evaluate(()=>{selectEditorOffsets(testNodes.target.contentEl,0,5);testMap.isComposing=true;});
+        const imePosition=await page.evaluate(()=>{const b=getSelection().getRangeAt(0).getBoundingClientRect();return{x:b.x+2,y:b.y+2}});
+        await page.mouse.click(imePosition.x,imePosition.y,{button:'right'});assert.equal(await page.locator('.mm-text-format-menu').count(),0);
+        await page.evaluate(()=>{testMap.isComposing=false;testMap.finishEditingForHistory();const n=testMap.summaries.items[0].root;n.setText('Summary words');n.setPosition(220,160);testMap.setSelectedNodes([n]);n.edit();selectEditorOffsets(n.contentEl,0,7);});
+        await openTextMenu();await formatButton('bold').click();
+        await page.waitForFunction(()=>testMap.editNode?.data.summaryRoot && testMap.editNode.contentEl.innerText==='**Summary** words');
+        assert.ok(await page.evaluate(()=>extractSummaries(testMap.getMarkdown()).entries.some(s=>s.root.text==='**Summary** words')));
+        console.log('Text-format menu: native selection, Markdown emphasis, palette/custom/reset color, multiline offsets, save, undo/redo, Escape, IME and independent summary nodes passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

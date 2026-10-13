@@ -1,6 +1,20 @@
 // 简体中文
 
 export default {
+    "Text format": "文字格式",
+    "Bold": "加粗",
+    "Italic": "斜体",
+    "Strikethrough": "删除线",
+    "Highlight": "高亮",
+    "Red": "红色",
+    "Orange": "橙色",
+    "Yellow": "黄色",
+    "Green": "绿色",
+    "Blue": "蓝色",
+    "Purple": "紫色",
+    "Default text color": "恢复默认文字颜色",
+    "Custom text color": "自定义文字颜色",
+
     "Move within the same tree": "请在同一棵树内移动节点；跨主图与概括子树请使用复制粘贴。",
     "Select at least one node": "请至少选择一个节点",
     "Select nodes in the main tree": "请选择主图中的原节点",

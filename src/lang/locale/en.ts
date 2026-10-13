@@ -1,6 +1,20 @@
 // English
 
 export default {
+    "Text format": "Text format",
+    "Bold": "Bold",
+    "Italic": "Italic",
+    "Strikethrough": "Strikethrough",
+    "Highlight": "Highlight",
+    "Red": "Red",
+    "Orange": "Orange",
+    "Yellow": "Yellow",
+    "Green": "Green",
+    "Blue": "Blue",
+    "Purple": "Purple",
+    "Default text color": "Default text color",
+    "Custom text color": "Custom text color",
+
     "Move within the same tree": "Move nodes within the same tree; use copy/paste to transfer between trees.",
     "Select at least one node": "Select at least one node",
     "Select nodes in the main tree": "Select nodes in the main tree",
