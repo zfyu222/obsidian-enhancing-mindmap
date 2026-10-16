@@ -341,3 +341,16 @@
 .mm-preset-actions { display: flex; gap: 8px; }
 .mm-preset-error { color: var(--text-error); }
 @media (max-width: 600px) { .mm-side-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(230px, 85%); box-shadow: -4px 0 12px #0002; } }
+
+.mm-preset-colors { margin: 14px 0; }
+.mm-preset-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.mm-preset-swatches button.mm-preset-swatch {
+  width: 28px; height: 28px; min-width: 28px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--background-modifier-border, #888); box-shadow: none;
+}
+.mm-preset-swatches button[aria-pressed="true"] {
+  outline: 2px solid var(--interactive-accent, #5294e2); outline-offset: 2px;
+}
+.mm-preset-swatches button:focus-visible { outline: 2px solid var(--text-normal, #aaa); outline-offset: 3px; }
+.mm-preset-custom-color { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mm-preset-custom-color input[type=color] { width: 48px; height: 32px; padding: 2px; cursor: pointer; }

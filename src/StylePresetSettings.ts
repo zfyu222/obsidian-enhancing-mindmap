@@ -1,6 +1,38 @@
 import { NodeStylePreset, normalizePresets, renamePreset, applyNodeStyle } from './nodeStyles';
 import { t } from './lang/helpers';
 
+/** Preset swatches and the platform color palette share one optional color value. */
+export function renderPresetColorPicker(host: HTMLElement, initial: string | undefined, onChange: () => void) {
+    let current = /^#[0-9a-f]{6}$/i.test(initial || '') ? initial!.toLowerCase() : '';
+    const group = document.createElement('div'); group.className = 'mm-preset-colors';
+    group.setAttribute('role', 'group'); group.setAttribute('aria-label', t('Text color'));
+    const title = document.createElement('div'); title.textContent = t('Text color'); group.appendChild(title); host.appendChild(group);
+    const swatches = document.createElement('div'); swatches.className = 'mm-preset-swatches'; group.appendChild(swatches);
+    const buttons: {element: HTMLButtonElement; color: string}[] = [];
+    const options = [['', 'Follow theme'], ['#e53935', 'Red'], ['#fb8c00', 'Orange'], ['#fdd835', 'Yellow'],
+        ['#43a047', 'Green'], ['#00897b', 'Teal'], ['#1e88e5', 'Blue'], ['#8e24aa', 'Purple'],
+        ['#d81b60', 'Pink'], ['#757575', 'Gray'], ['#212121', 'Black'], ['#ffffff', 'White']];
+    options.forEach(([value, label]) => {
+        const button = document.createElement('button'); button.type = 'button';
+        button.title = t(label as any); button.setAttribute('aria-label', t(label as any));
+        if (value) { button.className = 'mm-preset-swatch'; button.style.backgroundColor = value; }
+        else { button.className = 'mm-preset-theme-color'; button.textContent = t('Follow theme'); }
+        button.addEventListener('click', () => { current = value; update(); onChange(); });
+        swatches.appendChild(button); buttons.push({element: button, color: value});
+    });
+    const custom = document.createElement('label'); custom.className = 'mm-preset-custom-color'; custom.textContent = t('Custom text color');
+    const picker = document.createElement('input'); picker.type = 'color'; picker.setAttribute('aria-label', t('Custom text color'));
+    custom.appendChild(picker); group.appendChild(custom);
+    const update = () => {
+        buttons.forEach(({element, color}) => element.setAttribute('aria-pressed', String(current === color)));
+        picker.value = current || '#5294e2';
+    };
+    const chooseCustom = () => { current = picker.value.toLowerCase(); update(); onChange(); };
+    picker.addEventListener('input', chooseCustom); picker.addEventListener('change', chooseCustom);
+    update();
+    return {get value() { return current; }};
+}
+
 /** Native controls keep this editor usable in both desktop and mobile settings. */
 export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
     const section = document.createElement('section'); section.className = 'mm-preset-settings'; host.appendChild(section);
@@ -22,7 +54,7 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
                 row.appendChild(input); form.appendChild(row); return input;
             };
             const name = field(t('Preset name'), 'text', preset.name); name.maxLength = 80;
-            const color = field(t('Text color hex'), 'text', preset.color || ''); color.placeholder = '#e53935';
+            const color = renderPresetColorPicker(form, preset.color, () => { updatePreview(); save.textContent = t('Save preset'); });
             const size = field(t('Preset font size'), 'number', preset.fontSize?.toString() || ''); size.min = '8'; size.max = '72';
             const toggles: Record<string, HTMLInputElement> = {};
             for (const [key, label] of [['bold', 'Bold'], ['italic', 'Italic'], ['underline', 'Underline'], ['strike', 'Strikethrough']]) {

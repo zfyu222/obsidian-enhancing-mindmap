@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
+const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -550,7 +550,17 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         });
         const settings=page.locator('#preset-settings');
         await settings.getByLabel('Preset name',{exact:true}).fill('结论');
-        await settings.getByLabel('Text color hex',{exact:true}).fill('#22aa88');
+        assert.equal(await settings.locator('input[type=text]').count(),1,'Only the preset name is a text field');
+        await settings.getByRole('button',{name:'Blue',exact:true}).click();
+        assert.equal(await settings.getByRole('button',{name:'Blue',exact:true}).getAttribute('aria-pressed'),'true');
+        assert.equal(await settings.locator('.mm-preset-preview .mm-node-content').evaluate(el=>getComputedStyle(el).color),'rgb(30, 136, 229)');
+        await settings.getByRole('button',{name:'Follow theme',exact:true}).click();
+        assert.equal(await settings.getByRole('button',{name:'Follow theme',exact:true}).getAttribute('aria-pressed'),'true');
+        assert.equal(await settings.locator('.mm-preset-preview').evaluate(el=>el.classList.contains('mm-preset-color')),false);
+        const customPicker=settings.getByLabel('Custom text color',{exact:true});
+        assert.equal(await customPicker.getAttribute('type'),'color');
+        await customPicker.evaluate(el=>{el.value='#22aa88';el.dispatchEvent(new Event('input',{bubbles:true}));});
+        assert.equal(await settings.getByRole('button',{name:'Follow theme',exact:true}).getAttribute('aria-pressed'),'false');
         await settings.getByLabel('Italic',{exact:true}).uncheck();
         await settings.getByLabel('Underline',{exact:true}).check();
         await settings.getByRole('button',{name:'Save preset',exact:true}).click();
@@ -560,12 +570,17 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontStyle),'normal');
         assert.match(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).textDecorationLine),/underline/);
         assert.ok(await page.evaluate(()=>JSON.parse(savedPresetData).nodeStylePresets[0].aliases.includes('重点')));
-        await page.screenshot({path:path.join(screenshotDir,'style-presets.png')});
+        await page.screenshot({path:path.join(screenshotDir,'style-color-picker.png')});
         // Invalid names cannot change the active preset; delete retains unresolved note references.
         await settings.getByLabel('Preset name',{exact:true}).fill('');
         await settings.getByRole('button',{name:'Save preset',exact:true}).click();
         assert.ok((await settings.locator('[role=alert]').textContent()).length);
         assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets[0].name),'结论');
+        await settings.getByLabel('Preset name',{exact:true}).fill('结论');
+        await settings.getByRole('button',{name:'Follow theme',exact:true}).click();
+        await settings.getByRole('button',{name:'Save preset',exact:true}).click();
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets[0].color),undefined);
+        assert.equal(await page.evaluate(()=>testMap.root.containEl.classList.contains('mm-preset-color')),false);
         await settings.getByRole('button',{name:'Delete preset',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
         assert.equal(await presetSelect.locator('option:checked').textContent(),'Missing preset: 重点');
