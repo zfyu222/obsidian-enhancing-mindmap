@@ -628,9 +628,31 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.color),'#e53935');
         await inspector.getByRole('button',{name:'Bold',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.bold),true);
+        assert.equal(await inspector.getByRole('button',{name:'Apply font size',exact:true}).count(),0);
+        const beforeSizeHistory=await page.evaluate(()=>testMap.exec.history.undos.length);
+        await inspector.getByLabel('Font size',{exact:true}).fill('21');
+        await page.waitForTimeout(300);
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.fontSize),undefined);
         await inspector.getByLabel('Font size',{exact:true}).fill('22');
-        await inspector.getByRole('button',{name:'Apply font size',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.nodeStyle?.fontSize===22);
         assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontSize),'22px');
+        assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),beforeSizeHistory+1);
+        assert.equal(await sidebarSize.evaluate(el=>el===document.activeElement),true,'Auto-apply keeps the number field focused');
+        await sidebarSize.fill('');
+        await page.waitForFunction(()=>testMap.root.data.nodeStyle?.fontSize===null);
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontSize),'16px');
+        await sidebarSize.fill('22');await page.waitForFunction(()=>testMap.root.data.nodeStyle?.fontSize===22);
+        // Changing the selected node cancels the pending size rather than changing its new target.
+        await sidebarSize.fill('23');
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.root.children[0]]));
+        await page.waitForTimeout(550);
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.fontSize),22);
+        assert.equal(await page.evaluate(()=>testMap.root.children[0].data.nodeStyle?.fontSize),undefined);
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.root]));
+        await sidebarSize.fill('999');await page.waitForTimeout(550);
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.fontSize),22);
+        await sidebarSize.fill('22');
+
         // Save the effective node style, including overrides, as a reusable named preset.
         await page.evaluate(()=>{testMap.view.plugin=stylePlugin;testMap.emit('toolbarChange');});
         const saveNodePreset=inspector.getByRole('button',{name:'Save node style as preset',exact:true});
@@ -661,6 +683,11 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
+        await sidebarSize.fill('18');
+        await page.evaluate(()=>{testMap.root.contentEl.focus();selectEditorOffsets(testMap.root.contentEl,0,6);});
+        await page.waitForTimeout(550);
+        assert.ok(!(await page.evaluate(()=>testMap.root.data.text)).includes('font-size:18px'),'Changing the text range cancels the old pending value');
+        await page.evaluate(()=>selectEditorOffsets(testMap.root.contentEl,7,15));
         assert.equal(await sidebarSize.getAttribute('placeholder'),'Default (16)','Text without explicit size shows its inherited size');
         assert.equal(await presetSelect.isVisible(),false,'Node presets are unavailable for selected text');
         assert.equal(await saveNodePreset.isVisible(),false);
@@ -669,7 +696,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
         await inspector.getByLabel('Font size',{exact:true}).fill('19');
-        await inspector.getByRole('button',{name:'Apply font size',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('font-size:19px'));
         await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('font-size:19px'));
         const sidebarPicker=inspector.getByLabel('Custom text color',{exact:true});
         const beforeCustom=await page.evaluate(()=>testMap.root.data.text);
@@ -691,7 +718,11 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Node style');
         assert.equal(await presetSelect.isVisible(),true);
         await page.screenshot({path:path.join(screenshotDir,'sidebar-node-style.png')});
+        const beforeDestroySize=await page.evaluate(()=>testMap.root.data.nodeStyle?.fontSize);
+        await sidebarSize.fill('31');
         await page.evaluate(()=>{stylePanel.destroy();testMap.view.panel=null;});
+        await page.waitForTimeout(550);
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle?.fontSize),beforeDestroySize);
         assert.equal(await page.locator('.mm-side-panel').count(),0);
         await page.evaluate(()=>{
             const branch=testMap.root.children[0];

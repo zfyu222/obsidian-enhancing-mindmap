@@ -12,7 +12,8 @@ export default class MindMapPanel {
     private heading: HTMLElement;
     private presetSection: HTMLElement;
     private fontSize: HTMLInputElement;
-    private sizeApply: HTMLButtonElement;
+    private sizeTimer?: ReturnType<typeof setTimeout>;
+    private sizeDraft?: {nodes: any[]; editor?: any; text?: {node: any; text: string; start: number; end: number}; value: number | null};
     private reset: HTMLButtonElement;
     private color: ReturnType<typeof renderPresetColorPicker>;
     private buttons: Record<string,HTMLButtonElement> = {};
@@ -39,12 +40,8 @@ export default class MindMapPanel {
         const sizeLabel = document.createElement('label'); sizeLabel.textContent = t('Font size'); sizeRow.appendChild(sizeLabel);
         this.fontSize = document.createElement('input'); this.fontSize.type = 'number'; this.fontSize.min = '8'; this.fontSize.max = '72';
         this.fontSize.placeholder = t('Default'); this.fontSize.setAttribute('aria-label', t('Font size')); sizeLabel.appendChild(this.fontSize);
-        this.sizeApply = document.createElement('button'); this.sizeApply.type = 'button'; this.sizeApply.textContent = t('Apply font size'); sizeRow.appendChild(this.sizeApply);
-        this.sizeApply.addEventListener('click', () => {
-            const value = this.fontSize.value ? Number(this.fontSize.value) : null;
-            if (value !== null && (!Number.isFinite(value) || value < 8 || value > 72)) { this.fontSize.reportValidity(); return; }
-            this.apply('fontSize', value);
-        });
+        this.fontSize.step = 'any';
+        this.fontSize.addEventListener('input', this.scheduleFontSize);
         const toggles = document.createElement('div'); toggles.className = 'mm-panel-format-buttons'; section.appendChild(toggles);
         for (const [key, label, text] of [['bold','Bold','B'],['italic','Italic','I'],['underline','Underline','U'],['strike','Strikethrough','S']]) {
             const button = document.createElement('button'); button.type = 'button'; button.textContent = text;
@@ -53,12 +50,13 @@ export default class MindMapPanel {
             this.buttons[key] = button; toggles.appendChild(button);
         }
         this.reset = document.createElement('button'); this.reset.type = 'button'; this.reset.textContent = t('Clear local node style');
-        this.reset.addEventListener('click', () => { map.applyLocalNodeStyle(); map.focusAfterHistory(); }); section.appendChild(this.reset);
+        this.reset.addEventListener('click', () => { this.cancelFontSize(); map.applyLocalNodeStyle(); map.focusAfterHistory(); }); section.appendChild(this.reset);
         this.presetSection = document.createElement('section'); this.presetSection.className = 'mm-panel-presets'; this.element.appendChild(this.presetSection);
         const presetLabel = document.createElement('h4'); presetLabel.textContent = t('Node style preset'); this.presetSection.appendChild(presetLabel);
         this.select = document.createElement('select'); this.select.setAttribute('aria-label', t('Node style preset')); this.presetSection.appendChild(this.select);
         this.select.addEventListener('change', () => {
             if (this.textSelection || this.select.value === '__mixed__') return;
+            this.cancelFontSize();
             map.applyStylePreset(this.select.value || undefined); map.focusAfterHistory();
         });
         this.savePreset = document.createElement('button'); this.savePreset.type = 'button'; this.savePreset.textContent = t('Save node style as preset');
@@ -66,6 +64,8 @@ export default class MindMapPanel {
         this.savePreset.addEventListener('click', () => {
             const nodes = map.getSelectedNodes();
             if (this.textSelection || nodes.length !== 1 || map.isComposing) return;
+            const draft = this.sizeDraft; this.cancelFontSize();
+            if (draft && this.sameSizeContext(draft)) this.apply('fontSize', draft.value, true);
             map.finishEditingForHistory();
             this.presetSource = {node: nodes[0], style: snapshotNodeStyle(nodes[0], map.setting.nodeStylePresets || [])};
             this.presetForm.hidden = false; this.presetError.textContent = ''; this.presetName.value = ''; this.presetName.focus();
@@ -89,6 +89,29 @@ export default class MindMapPanel {
         map.on('toolbarChange', this.update); map.on('mindMapChange', this.update); map.appEl.addEventListener('input', this.selectionChange);
         this.update();
     }
+    private cancelFontSize() {
+        clearTimeout(this.sizeTimer); this.sizeTimer = undefined; this.sizeDraft = undefined;
+    }
+    private sameSizeContext(draft: NonNullable<MindMapPanel['sizeDraft']>) {
+        const nodes = this.map.getSelectedNodes(), text = this.textSelection;
+        const editor = this.map.editNode?.data.isEdit ? this.map.editNode : undefined;
+        return !this.map.isComposing && editor === draft.editor && nodes.length === draft.nodes.length &&
+            draft.nodes.every(node => nodes.includes(node) && this.map.getNodeById(node.getId()) === node) &&
+            (!draft.text ? !text : !!text && text.node === draft.text.node && text.text === draft.text.text && text.start === draft.text.start && text.end === draft.text.end);
+    }
+    private scheduleFontSize = () => {
+        this.cancelFontSize();
+        if (this.pending || this.map.isComposing || this.fontSize.validity.badInput) return;
+        const value = this.fontSize.value ? Number(this.fontSize.value) : null;
+        if (value !== null && (!Number.isFinite(value) || value < 8 || value > 72)) return;
+        const nodes = this.map.getSelectedNodes(); if (!nodes.length) return;
+        this.sizeDraft = {nodes, editor: this.map.editNode?.data.isEdit ? this.map.editNode : undefined,
+            text: this.textSelection ? {...this.textSelection} : undefined, value};
+        this.sizeTimer = setTimeout(() => {
+            const draft = this.sizeDraft; this.sizeTimer = undefined; this.sizeDraft = undefined;
+            if (draft && this.sameSizeContext(draft)) this.apply('fontSize', draft.value, true);
+        }, 500);
+    };
     private async createPreset() {
         const source = this.presetSource, plugin = this.map.view?.plugin;
         if (!source || !plugin || this.savingPreset || this.map.isComposing) return;
@@ -129,19 +152,20 @@ export default class MindMapPanel {
         }
         this.update();
     };
-    private apply(key: string, value?: any) {
+    private apply(key: string, value?: any, keepSizeFocus = false) {
         if (this.pending || this.map.isComposing) return;
         const saved = this.textSelection;
+        const focusSize = keepSizeFocus && this.doc.activeElement === this.fontSize;
         if (saved) {
             const style = key === 'color' ? (value || 'default') : key === 'fontSize' ? 'size:' + (value ?? 'default') : key;
             this.pending = true;
-            const started = applyEditorStyle(this.map, saved.node, saved, style, () => { this.pending = false; this.selectionChange(); });
+            const started = applyEditorStyle(this.map, saved.node, saved, style, () => { this.pending = false; this.selectionChange(); if (focusSize) this.fontSize.focus({preventScroll: true}); });
             if (!started) { this.pending = false; this.selectionChange(); }
         } else {
             const nodes = this.map.getSelectedNodes();
             if (!nodes.length) return;
             if (value === undefined) value = !nodes.every(node => !!(effectiveNodeStyle(node, this.map.setting.nodeStylePresets || []) as any)[key]);
-            this.map.applyLocalNodeStyle({[key]: value}); this.map.focusAfterHistory();
+            this.map.applyLocalNodeStyle({[key]: value}); if (!keepSizeFocus) this.map.focusAfterHistory();
         }
         this.update();
     }
@@ -150,6 +174,7 @@ export default class MindMapPanel {
         const nodes = this.map.root ? this.map.getSelectedNodes() : [];
         const presets = this.map.setting.nodeStylePresets || [];
         if (this.textSelection && (!this.textSelection.node.data.isEdit || this.map.getNodeById(this.textSelection.node.getId()) !== this.textSelection.node)) this.textSelection = undefined;
+        if (this.sizeDraft && !this.sameSizeContext(this.sizeDraft)) this.cancelFontSize();
         const saved = this.textSelection;
         const textMode = !!saved;
         const disabled = this.map.isComposing || (textMode ? false : !nodes.length);
@@ -161,7 +186,7 @@ export default class MindMapPanel {
         if (this.presetSource && (textMode || nodes.length !== 1 || nodes[0] !== this.presetSource.node)) {
             this.presetForm.hidden = true; this.presetSource = undefined;
         }
-        this.color.setDisabled(disabled); this.fontSize.disabled = disabled; this.sizeApply.disabled = disabled;
+        this.color.setDisabled(disabled); this.fontSize.disabled = disabled;
         const styles = nodes.map(node => effectiveNodeStyle(node, presets));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;
         const sizes = nodes.map((node, index) => {
@@ -188,10 +213,10 @@ export default class MindMapPanel {
                 if (c) color = c[1]; if (n) size = n[1];
             });
             this.color.setValue(color);
-            if (this.doc.activeElement !== this.fontSize) this.fontSize.value = size;
+            if (!this.sizeDraft && this.doc.activeElement !== this.fontSize) this.fontSize.value = size;
         } else {
             this.color.setValue(common('color'));
-            if (this.doc.activeElement !== this.fontSize) this.fontSize.value = common('fontSize')?.toString() || '';
+            if (!this.sizeDraft && this.doc.activeElement !== this.fontSize) this.fontSize.value = common('fontSize')?.toString() || '';
         }
         for (const key of Object.keys(this.buttons)) {
             const button = this.buttons[key]; button.disabled = disabled;
@@ -212,8 +237,9 @@ export default class MindMapPanel {
         if (mixed) option('__mixed__',t('Mixed presets')); else if (value && !findPreset(presets,value)) option(value,t('Missing preset')+': '+value);
         this.select.value = mixed ? '__mixed__' : value;
     };
-    toggle() { this.element.hidden = !this.element.hidden; }
+    toggle() { this.element.hidden = !this.element.hidden; if (this.element.hidden) this.cancelFontSize(); }
     destroy() {
+        this.cancelFontSize();
         this.doc.removeEventListener('selectionchange', this.selectionChange);
         this.map.off('toolbarChange',this.update); this.map.off('mindMapChange',this.update); this.map.appEl.removeEventListener('input',this.selectionChange); this.element.remove();
     }

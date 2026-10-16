@@ -9,7 +9,6 @@ export default {
     "Cancel saving preset": "Cancel saving preset",
     "Select one node to save preset": "Select one node to save preset",
     "Default": "Default",
-    "Apply font size": "Apply font size",
     "Clear local node style": "Clear local node style",
     "Selected text style": "Selected text style",
     "Only selected text is affected": "Only selected text is affected",
