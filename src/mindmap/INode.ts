@@ -42,6 +42,7 @@ interface BOX {
 export class INodeData implements INode{
     summaryMember?: boolean;
     stylePreset?: string;
+    nodeStyle?: any;
     id:string;
     text:string;
     pid?:string;
@@ -117,7 +118,7 @@ export default class Node {
 
     parseText(){
         MarkdownRenderer.renderMarkdown( this.data.text ,this.contentEl,this.mindmap.path||"",null).then(()=>{
-            if (this.data.stylePreset) applyNodeStyle(this, this.mindmap?.setting?.nodeStylePresets || []);
+            if (this.data.stylePreset || this.data.nodeStyle) applyNodeStyle(this, this.mindmap?.setting?.nodeStylePresets || []);
             this.data.mdText = this.contentEl.innerHTML;
             this.refreshBox();
             this.mindmap&&this.mindmap.emit('initNode',{});

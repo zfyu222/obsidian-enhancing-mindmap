@@ -18,14 +18,34 @@ export function formatSelection(text: string, start: number, end: number, style:
         } else if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2 && (style !== 'italic' || italicInside)) {
             selected = selected.slice(marker.length, -marker.length);
         } else { before += marker; after = marker + after; }
+    } else if (style === 'underline') {
+        if (before.endsWith('<u>') && after.startsWith('</u>')) { before = before.slice(0,-3); after = after.slice(4); }
+        else if (selected.startsWith('<u>') && selected.endsWith('</u>')) selected = selected.slice(3,-4);
+        else { before += '<u>'; after = '</u>' + after; }
     } else {
-        if (style !== 'default' && !/^#[0-9a-f]{6}$/i.test(style)) return null;
-        const opening = /<span style="color:\s*#[0-9a-f]{6}">$/i.exec(before);
-        const full = /^<span style="color:\s*#[0-9a-f]{6}">([\s\S]*)<\/span>$/i.exec(selected);
-        if (opening && after.startsWith('</span>')) {
-            before = before.slice(0, -opening[0].length); after = after.slice(7);
-        } else if (full) selected = full[1];
-        if (style !== 'default') { before += `<span style="color:${style.toLowerCase()}">`; after = '</span>' + after; }
+        const size = /^size:(default|[0-9]+(?:\.[0-9]+)?)$/.exec(style);
+        if (size && size[1] !== 'default' && (+size[1] < 8 || +size[1] > 72)) return null;
+        if (!size && style !== 'default' && !/^#[0-9a-f]{6}$/i.test(style)) return null;
+        const properties: Record<string,string> = {};
+        const opening = /<span style="([^"<>]+)">$/.exec(before);
+        const full = /^<span style="([^"<>]+)">([\s\S]*)<\/span>$/.exec(selected);
+        const attributes = opening && after.startsWith('</span>') ? opening[1] : full?.[1];
+        if (attributes) {
+            const valid = attributes.split(';').every(part => {
+                const pair = /^(color|font-size):\s*(#[0-9a-f]{6}|[0-9]+(?:\.[0-9]+)?px)$/i.exec(part);
+                if (!pair || (pair[1] === 'color' ? !/^#/.test(pair[2]) : !/px$/.test(pair[2]))) return false;
+                properties[pair[1]] = pair[2]; return true;
+            });
+            if (valid) {
+                if (opening && after.startsWith('</span>')) { before = before.slice(0,-opening[0].length); after = after.slice(7); }
+                else if (full) selected = full[2];
+            } else Object.keys(properties).forEach(key => delete properties[key]);
+        }
+        const property = size ? 'font-size' : 'color';
+        const value = size ? (size[1] === 'default' ? '' : size[1] + 'px') : (style === 'default' ? '' : style.toLowerCase());
+        if (value) properties[property] = value; else delete properties[property];
+        const css = Object.keys(properties).map(key => key + ':' + properties[key]).join(';');
+        if (css) { before += `<span style="${css}">`; after = '</span>' + after; }
     }
     return { text: before + selected + after, start: before.length, end: before.length + selected.length };
 }
@@ -65,6 +85,25 @@ export function selectEditorOffsets(editor: HTMLElement, start: number, end: num
     };
     const range = editor.ownerDocument.createRange(); range.setStart(...point(start)); range.setEnd(...point(end));
     const selection = editor.ownerDocument.defaultView.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+}
+
+/** Applies only to a validated saved editor range; never assigns a node preset. */
+export function applyEditorStyle(map: any, node: any, saved: {text: string; start: number; end: number}, style: string, complete: () => void = () => {}) {
+    if (map.isComposing || map.getNodeById(node.getId()) !== node || !node.data.isEdit || node.contentEl.innerText.replace(/\r\n/g,'\n') !== saved.text) return false;
+    const result = formatSelection(saved.text, saved.start, saved.end, style);
+    if (!result || result.text === saved.text) return false;
+    map.finishEditingForHistory();
+    map.execute('changeNodeText', {node, oldText: node.data.text, text: result.text.trim()});
+    map.setSelectedNodes([node]);
+    setTimeout(() => {
+        if (map.getNodeById(node.getId()) === node && map.selectNode === node && node.data.text === result.text.trim() && !map.editNode?.data.isEdit) {
+            node.edit();
+            const leading = result.text.length - result.text.replace(/^\s+/, '').length;
+            selectEditorOffsets(node.contentEl, Math.max(0, result.start-leading), Math.min(node.data.text.length, result.end-leading));
+        }
+        complete(); map.emit('toolbarChange');
+    }, 0);
+    return true;
 }
 
 export default class TextFormatMenu {

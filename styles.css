@@ -359,3 +359,18 @@
 .mm-preset-settings > summary, .mm-preset-card > summary { cursor: pointer; font-weight: 600; }
 .mm-preset-card[open] > summary { margin-bottom: 14px; }
 .mm-preset-settings > summary:focus-visible, .mm-preset-card > summary:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }
+
+.mm-side-panel .mm-preset-swatches button { width: auto; margin: 0; }
+.mm-side-panel .mm-preset-swatches button.mm-preset-swatch { width: 24px; min-width: 24px; height: 24px; }
+.mm-panel-size label { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 8px; }
+.mm-panel-size input { width: 70px; }
+.mm-panel-format-buttons { display: flex; gap: 6px; margin-bottom: 12px; }
+.mm-panel-format-buttons button { width: 36px; margin: 0; }
+.mm-panel-format-buttons button[aria-pressed=true] { background: var(--interactive-accent); color: var(--text-on-accent); }
+.mm-panel-format-buttons button[aria-pressed=mixed] { border: 2px dashed var(--interactive-accent); }
+.mm-panel-format-buttons button[data-format=bold] { font-weight: bold; }
+.mm-panel-format-buttons button[data-format=italic] { font-style: italic; }
+.mm-panel-format-buttons button[data-format=underline] { text-decoration: underline; }
+.mm-panel-format-buttons button[data-format=strike] { text-decoration: line-through; }
+.mm-panel-presets { border-top: 1px solid var(--background-modifier-border); padding-top: 14px; margin-top: 14px; }
+.mm-panel-presets[hidden] { display: none; }

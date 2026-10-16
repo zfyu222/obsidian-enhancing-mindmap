@@ -2,7 +2,7 @@ import { NodeStylePreset, normalizePresets, renamePreset, applyNodeStyle } from 
 import { t } from './lang/helpers';
 
 /** Preset swatches and the platform color palette share one optional color value. */
-export function renderPresetColorPicker(host: HTMLElement, initial: string | undefined, onChange: () => void) {
+export function renderPresetColorPicker(host: HTMLElement, initial: string | undefined, onChange: () => void, live = true) {
     let current = /^#[0-9a-f]{6}$/i.test(initial || '') ? initial!.toLowerCase() : '';
     const group = document.createElement('div'); group.className = 'mm-preset-colors';
     group.setAttribute('role', 'group'); group.setAttribute('aria-label', t('Text color'));
@@ -27,10 +27,13 @@ export function renderPresetColorPicker(host: HTMLElement, initial: string | und
         buttons.forEach(({element, color}) => element.setAttribute('aria-pressed', String(current === color)));
         picker.value = current || '#5294e2';
     };
-    const chooseCustom = () => { current = picker.value.toLowerCase(); update(); onChange(); };
+    const chooseCustom = (event: Event) => { current = picker.value.toLowerCase(); update(); if (live || event.type === 'change') onChange(); };
     picker.addEventListener('input', chooseCustom); picker.addEventListener('change', chooseCustom);
     update();
-    return {get value() { return current; }};
+    return {get value() { return current; },
+        setValue(value?: string) { current = /^#[0-9a-f]{6}$/i.test(value || '') ? value!.toLowerCase() : ''; update(); },
+        setDisabled(disabled: boolean) { buttons.forEach(({element}) => element.disabled = disabled); picker.disabled = disabled; }
+    };
 }
 
 /** Native controls keep this editor usable in both desktop and mobile settings. */

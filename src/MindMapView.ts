@@ -533,7 +533,8 @@ export class MindMapView extends TextFileView implements HoverParent {
       var map: INodeData = {
         id: marker.id || id || uuid(),
         summaryMember: !!marker.id,
-        stylePreset: prepared.styles.get(mapData.p?.lines?.[0]),
+        stylePreset: prepared.styles.get(mapData.p?.lines?.[0])?.name,
+        nodeStyle: prepared.styles.get(mapData.p?.lines?.[0])?.overrides,
         text: id ? mapData.v.replace(new RegExp(` ?\\^${id}$`, 'im'), '') : mapData.v,
         children: [],
         expanded: id ? false:true

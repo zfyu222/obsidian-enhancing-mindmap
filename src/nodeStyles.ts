@@ -34,21 +34,38 @@ export function renamePreset(presets: NodeStylePreset[], preset: NodeStylePreset
     }
     return true;
 }
-export function styleMarker(name?: string): string {
-    return validPresetName(name) ? ` <!-- mm:style ${JSON.stringify({name})} -->` : '';
+export interface LocalNodeStyle { color?: string; fontSize?: number | null; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
+export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const result: any = {};
+    if (value.color === '' || /^#[0-9a-f]{6}$/i.test(value.color || '')) result.color = value.color;
+    if (value.fontSize === null || (Number.isFinite(value.fontSize) && value.fontSize >= 8 && value.fontSize <= 72)) result.fontSize = value.fontSize;
+    for (const key of ['bold','italic','underline','strike']) if (typeof value[key] === 'boolean') result[key] = value[key];
+    return Object.keys(result).length ? result : undefined;
 }
-export function readStyleMarker(text: string): {text: string; name?: string} {
+export function effectiveNodeStyle(node: any, presets: NodeStylePreset[]) {
+    return {...findPreset(presets, node.data.stylePreset), ...normalizeNodeStyle(node.data.nodeStyle)};
+}
+export function styleMarker(name?: string, overrides?: LocalNodeStyle): string {
+    const local = normalizeNodeStyle(overrides);
+    const meta = {...(validPresetName(name) ? {name} : {}), ...(local ? {overrides: local} : {})};
+    return Object.keys(meta).length ? ` <!-- mm:style ${JSON.stringify(meta)} -->` : '';
+}
+export function readStyleMarker(text: string): {text: string; name?: string; overrides?: LocalNodeStyle} {
     // Only trailing structural metadata; literal markers in code/paragraph bodies stay content.
     const match = /[ \t]*<!-- mm:style (\{[^\n]*?\}) -->(?=[ \t]*(?:<!-- mm:(?:node|summary|item) [^\n]*? -->[ \t]*)?$)/.exec(text);
     if (!match) return {text};
     try {
         const meta = JSON.parse(match[1]);
-        if (Object.keys(meta).length !== 1 || !validPresetName(meta.name)) return {text};
-        return {text: text.slice(0, match.index) + text.slice(match.index + match[0].length), name: meta.name};
+        if (!meta || Object.keys(meta).some(key => !['name','overrides'].includes(key)) || (!validPresetName(meta.name) && !meta.overrides) || (meta.name !== undefined && !validPresetName(meta.name))) return {text};
+        const overrides = normalizeNodeStyle(meta.overrides);
+        if (meta.overrides !== undefined && (!overrides || Object.keys(meta.overrides).some(key => (overrides as any)[key] !== meta.overrides[key]))) return {text};
+        return {text: text.slice(0, match.index) + text.slice(match.index + match[0].length), name: meta.name, overrides};
     } catch (_) { return {text}; }
 }
 export function applyNodeStyle(node: any, presets: NodeStylePreset[]) {
-    const preset = findPreset(presets, node.data.stylePreset);
+    const base = findPreset(presets, node.data.stylePreset);
+    const preset = base || normalizeNodeStyle(node.data.nodeStyle) ? effectiveNodeStyle(node, presets) : undefined;
     const style = node.containEl.style;
     for (const key of ['color','font-size','weight','italic','decoration']) style.removeProperty('--mm-preset-' + key);
     node.containEl.classList.toggle('mm-preset-node', !!preset);

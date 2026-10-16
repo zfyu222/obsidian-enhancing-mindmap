@@ -1,5 +1,5 @@
 import { NodeStylePreset, styleMarker, applyNodeStyle, findPreset } from '../nodeStyles';
-import StyleNodes from './StyleNodes';
+import StyleNodes, { ChangeNodeStyle } from './StyleNodes';
 import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
 import TextFormatMenu from './text-format'
@@ -2180,6 +2180,13 @@ export default class MindMap {
         this.exec.history.execute(new StyleNodes(this, nodes, name));
         this.emit('toolbarChange');
     }
+    applyLocalNodeStyle(patch?: any) {
+        if (this.isComposing) return;
+        this.finishEditingForHistory();
+        const nodes = this.getSelectedNodes();
+        if (nodes.length) this.exec.history.execute(new ChangeNodeStyle(this, nodes, patch));
+        this.emit('toolbarChange');
+    }
     refreshNodeStyles() {
         if (!this.root) return;
         this.traverseAll((node: INode) => applyNodeStyle(node, this.setting.nodeStylePresets || []));
@@ -2475,7 +2482,7 @@ export default class MindMap {
         this.traverseDF((node: INode) => {
             const text: string = node.data.text.trim();
             const parts = text.split('\n');
-            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + (node.data.stylePreset ? styleMarker(node.data.stylePreset) : '') + (node.data.summaryMember ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
+            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + (node.data.summaryMember ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
             if (node.getLevel() < level) {
                 const block = /^(```|~~~|\|)/.test(text);
                 lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);

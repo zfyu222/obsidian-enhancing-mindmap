@@ -12,7 +12,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(bundle);
-const code = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', '__awaiter', 'clipboardAction', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'MindMap'].map(name => {
+const code = ['normalizeNodeStyle', 'effectiveNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', '__awaiter', 'clipboardAction', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'MindMap'].map(name => {
     assert.ok(declarations.has(name), `Release bundle missing ${name}`);
     return declarations.get(name);
 }).join('\n');

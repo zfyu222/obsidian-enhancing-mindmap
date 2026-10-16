@@ -1,6 +1,11 @@
 // 简体中文
 
 export default {
+    "Default": "默认",
+    "Apply font size": "应用字号",
+    "Clear local node style": "清除节点局部样式",
+    "Selected text style": "选中文字样式",
+    "Only selected text is affected": "仅修改选中的文字，不使用节点预设",
     "Text color": "文字颜色",
     "Follow theme": "跟随主题",
     "Teal": "青色",

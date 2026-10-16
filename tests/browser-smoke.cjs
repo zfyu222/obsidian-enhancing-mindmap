@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
+const names = ['normalizeNodeStyle', 'effectiveNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -602,6 +602,48 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),undefined);
         await page.evaluate(()=>testMap.undo());
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
+        // Shared sidebar controls target nodes, or a preserved range in a node editor.
+        const inspector=page.locator('.mm-side-panel');
+        await page.evaluate(()=>{testMap.setSelectedNodes([testMap.root]);delete testMap.root.data.nodeStyle;testMap.refreshNodeStyles();});
+        await inspector.getByRole('button',{name:'Red',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.color),'#e53935');
+        await inspector.getByRole('button',{name:'Bold',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.bold),true);
+        await inspector.getByLabel('Font size',{exact:true}).fill('22');
+        await inspector.getByRole('button',{name:'Apply font size',exact:true}).click();
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontSize),'22px');
+        await inspector.getByRole('button',{name:'Clear local node style',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
+        await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
+        await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
+        assert.equal(await presetSelect.isVisible(),false,'Node presets are unavailable for selected text');
+        await inspector.getByRole('button',{name:'Blue',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('color:#1e88e5'));
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
+        await inspector.getByLabel('Font size',{exact:true}).fill('19');
+        await inspector.getByRole('button',{name:'Apply font size',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('font-size:19px'));
+        const sidebarPicker=inspector.getByLabel('Custom text color',{exact:true});
+        const beforeCustom=await page.evaluate(()=>testMap.root.data.text);
+        await sidebarPicker.evaluate(el=>{el.value='#ab1234';el.dispatchEvent(new Event('input',{bubbles:true}));});
+        assert.equal(await page.evaluate(()=>testMap.root.data.text),beforeCustom,'Dragging the native palette does not create history entries');
+        await sidebarPicker.evaluate(el=>el.dispatchEvent(new Event('change',{bubbles:true})));
+        await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('color:#ab1234'));
+        await inspector.getByRole('button',{name:'Underline',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('<u>selected</u>'));
+        assert.ok((await page.evaluate(()=>testMap.root.data.text)).startsWith('Before '));
+        assert.ok((await page.evaluate(()=>testMap.root.data.text)).endsWith(' after'));
+        assert.equal(await presetSelect.isVisible(),false);
+        await page.screenshot({path:path.join(screenshotDir,'sidebar-text-style.png')});
+        await page.keyboard.press('Control+z');
+        assert.ok(!(await page.evaluate(()=>testMap.root.data.text)).includes('<u>'));
+        await page.keyboard.press('Control+y');
+        assert.ok((await page.evaluate(()=>testMap.root.data.text)).includes('<u>'));
+        await page.evaluate(()=>{testMap.finishEditingForHistory();testMap.setSelectedNodes([testMap.root]);});
+        await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Node style');
+        assert.equal(await presetSelect.isVisible(),true);
+        await page.screenshot({path:path.join(screenshotDir,'sidebar-node-style.png')});
         await page.evaluate(()=>{stylePanel.destroy();testMap.view.panel=null;});
         assert.equal(await page.locator('.mm-side-panel').count(),0);
         await page.evaluate(()=>{

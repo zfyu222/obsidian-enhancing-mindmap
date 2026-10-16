@@ -39,3 +39,23 @@ test('formatted main nodes survive the production Markdown parser with stable me
  const styled='前**<span style="color:#e53935">重点</span>**后';const data=View.prototype.mdToData.call({},'# Main\n- '+styled+' <!-- mm:node {"id":"member-a"} -->');
  assert.equal(data.children[0].text,styled);assert.equal(data.children[0].id,'member-a');assert.equal(data.children[0].expanded,true);
 });
+
+test('text underline and size apply only within the selected range and preserve color',()=>{
+ const u=formatSelection('Before word after',7,11,'underline');assert.equal(u.text,'Before <u>word</u> after');
+ assert.equal(formatSelection(u.text,u.start,u.end,'underline').text,'Before word after');
+ const color=formatSelection('Before word after',7,11,'#43a047');
+ const size=formatSelection(color.text,color.start,color.end,'size:20');assert.equal(size.text,'Before <span style="color:#43a047;font-size:20px">word</span> after');
+ const reset=formatSelection(size.text,size.start,size.end,'size:default');assert.equal(reset.text,color.text);
+ const clearColor=formatSelection(size.text,size.start,size.end,'default');assert.equal(clearColor.text,'Before <span style="font-size:20px">word</span> after');
+ for(const style of ['size:0','size:999','size:abc']) assert.equal(formatSelection('word',0,4,style),null);
+});
+
+test('saved text formatting rejects stale ranges, detached nodes and IME without mutating a node',()=>{
+ const {applyEditorStyle}=moduleObject.exports;
+ const node={getId:()=> 'n',data:{isEdit:true},contentEl:{innerText:'changed'}};
+ let edits=0;const map={getNodeById:()=>node,finishEditingForHistory(){edits++}};
+ const saved={text:'word',start:0,end:4};
+ assert.equal(applyEditorStyle(map,node,saved,'bold'),false);
+ node.contentEl.innerText='word';map.isComposing=true;assert.equal(applyEditorStyle(map,node,saved,'bold'),false);
+ map.isComposing=false;map.getNodeById=()=>null;assert.equal(applyEditorStyle(map,node,saved,'bold'),false);assert.equal(edits,0);
+});

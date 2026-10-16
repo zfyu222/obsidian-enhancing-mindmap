@@ -13,9 +13,10 @@ const selection = load('src/mindmap/selection.ts');
 const clipboard = load('src/mindmap/clipboard.ts', {'./selection':selection});
 const commands = load('src/mindmap/Cmds.ts', {'./selection':selection});
 const Layout = load('src/mindmap/Layout.ts').default;
-const StyleNodes = load('src/mindmap/StyleNodes.ts', {'./Cmds':commands}).default;
+const styleCommands = load('src/mindmap/StyleNodes.ts', {'./Cmds':commands});
+const StyleNodes = styleCommands.default;
 const History = load('src/mindmap/History.ts').default;
-const MindMap = load('src/mindmap/mindmap.ts', {'./StyleNodes':{default:StyleNodes}}).default;
+const MindMap = load('src/mindmap/mindmap.ts', {'./StyleNodes':styleCommands}).default;
 const parser = require('../src/markmapLib/markmap-lib/dist/browser/index.js');
 const View = load('src/MindMapView.ts', {obsidian:{TextFileView:class{}},'./markmapLib/markmap-lib':parser,'./summary/markdown':markdown}).MindMapView;
 const Plugin = load('src/main.ts', {obsidian:{Plugin:class{}},'./MindMapView':{mindmapViewType:'mindmapView'}}).default;
@@ -115,4 +116,37 @@ test('real layout preserves branch presets, selection and editor state while upd
     assert.equal(branch.data.stylePreset,'重点');
     layout._setDirect(branch,'left');assert.ok(branch.containEl.classList.contains('mm-node-left'));
     assert.equal(branch.containEl.classList.contains('mm-node-right'),false);
+});
+
+test('local node styles override a shared preset without changing it and undo independently',()=>{
+    const map=mapFixture(),a=node('A',map.root),b=node('B',map.root);map.selectedNodes=[a,b];
+    map.applyLocalNodeStyle({color:'#43a047',bold:true,italic:false,fontSize:15});
+    assert.equal(map.exec.history.undos.length,1);
+    assert.equal(map.setting.nodeStylePresets[0].color,'#e53935');
+    assert.equal(styles.effectiveNodeStyle(a,map.setting.nodeStylePresets).color,'#43a047');
+    assert.equal(styles.effectiveNodeStyle(a,map.setting.nodeStylePresets).italic,false);
+    const md=map.getMarkdown(),parsed=View.prototype.mdToData.call({},md);
+    assert.equal(parsed.children[0].nodeStyle.color,'#43a047');assert.equal(parsed.children[0].stylePreset,'重点');
+    assert.equal(parsed.children[1].nodeStyle.fontSize,15);
+    map.exec.history.undo();assert.equal(a.data.nodeStyle,undefined);
+    map.exec.history.redo();assert.equal(b.data.nodeStyle.bold,true);
+    map.applyLocalNodeStyle();assert.equal(a.data.nodeStyle,undefined);
+    map.exec.history.undo();assert.equal(a.data.nodeStyle.fontSize,15);
+    map.applyStylePreset('重点');assert.equal(a.data.nodeStyle,undefined);
+    map.exec.history.undo();assert.equal(a.data.nodeStyle.color,'#43a047');
+});
+test('standalone local styles and summary local styles persist without any preset name',()=>{
+    const map=mapFixture(),a=node('A',map.root);delete a.data.stylePreset;
+    a.data.nodeStyle={color:'',fontSize:null,bold:false,underline:true};
+    const md=map.getMarkdown(),parsed=View.prototype.mdToData.call({},md);
+    assert.equal(parsed.children[0].stylePreset,undefined);assert.equal(parsed.children[0].nodeStyle.underline,true);
+    const entries=[{id:'s',memberIds:['a'],root:{id:'s',text:'Summary',nodeStyle:{color:'#123456'},expanded:true,children:[]}}];
+    const result=markdown.extractSummaries(markdown.summaryMarkdown(entries));assert.equal(result.entries[0].root.nodeStyle.color,'#123456');
+    const copied=clipboard.parseSubtree(clipboard.serializeForest([a]),()=>`new-${++serial}`);assert.equal(copied[0].nodeStyle.underline,true);
+});
+test('invalid local style attributes cannot inject CSS through metadata',()=>{
+    assert.equal(styles.normalizeNodeStyle({color:'red;position:fixed',fontSize:999,bold:'yes'}),undefined);
+    const original='text <!-- mm:style {"overrides":{"color":"#123456","future":true}} -->';
+    assert.equal(styles.readStyleMarker(original).text,original);
+    const text=styles.styleMarker(undefined,{bold:false,color:'#123456'});assert.equal(styles.readStyleMarker(text).overrides.bold,false);
 });
