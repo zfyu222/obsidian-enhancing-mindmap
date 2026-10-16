@@ -463,6 +463,7 @@ export default class MindMap {
         if (action && (node || (action === 'paste' && this.root))) {
             consume();
             if (action === 'copy') void this.copyToClipboard();
+            else if (action === 'cut') void this.cutSelectedNodes();
             else void this.pasteFromClipboard();
             return;
         }
@@ -2523,8 +2524,10 @@ export default class MindMap {
         const nodes = this.getSelectedRoots();
         if (!nodes.length || nodes.some(node => (!node.parent && !node.data.summaryRoot) || node.data.isEdit) || this.editNode?.data.isEdit) return;
         try {
-            await navigator.clipboard.writeText(this.copyForest(nodes));
-            if (nodes.every(node => this.getNodeById(node.getId()) === node && !node.data.isEdit)) this.deleteSelectedNodes(nodes);
+            const text = this.copyForest(nodes);
+            await navigator.clipboard.writeText(text);
+            // A delayed clipboard write must not remove nodes edited or detached meanwhile.
+            if (nodes.every(node => this.canPasteTo(node)) && this.copyForest(nodes) === text) this.deleteSelectedNodes(nodes);
         } catch (_) {
             new Notice('Unable to cut mind map nodes to the clipboard.');
         }

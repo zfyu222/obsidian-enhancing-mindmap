@@ -68,10 +68,10 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
     }
 }
 
-export function clipboardAction(e: KeyboardEvent, editing: boolean): 'copy' | 'paste' | null {
+export function clipboardAction(e: KeyboardEvent, editing: boolean): 'copy' | 'cut' | 'paste' | null {
     const target = e.target as HTMLElement;
     if (editing || e.isComposing || e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return null;
     if (target && (target.isContentEditable || (typeof target.closest === 'function' && target.closest('input, textarea, [contenteditable="true"]')))) return null;
     const key = e.key.toLowerCase();
-    return key === 'c' ? 'copy' : key === 'v' ? 'paste' : null;
+    return key === 'c' ? 'copy' : key === 'x' ? 'cut' : key === 'v' ? 'paste' : null;
 }

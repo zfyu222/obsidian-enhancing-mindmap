@@ -615,3 +615,75 @@ test('existing node draft, creation, and text redo retain one unified sequence w
     press(map, 'z', { metaKey: true }); assert.equal(n.data.text, 'Draft');
     press(map, 'z', { metaKey: true, shiftKey: true }); assert.equal(n.data.text, 'Changed again');
 });
+
+
+test('Ctrl/Cmd+X cuts selected subtrees once, pastes intact and supports undo/redo', async () => {
+    for (const modifier of ['ctrlKey', 'metaKey']) {
+        const map = keyboardFixture();
+        const a = add(map, map.root, 'A'), child = add(map, a, '**Child**'), b = add(map, map.root, 'B'), target = add(map, map.root, 'Target');
+        a.collapse();
+        map.setSelectedNodes([b, child, a]);
+        let text;
+        clipboardNavigator.clipboard.writeText = async value => { text = value; };
+        assert.equal(press(map, 'x', { [modifier]: true }).defaultPrevented, true);
+        await nextTick();
+        assert.deepEqual(map.root.children, [target]);
+        assert.equal(map.exec.history.undos.length, 1);
+        assert.equal(JSON.parse(text).text.length, 3);
+        press(map, 'z', { ctrlKey: true });
+        assert.deepEqual(map.root.children, [a, b, target]);
+        assert.equal(a.children[0], child);
+        press(map, 'y', { ctrlKey: true });
+        assert.deepEqual(map.root.children, [target]);
+        map.setSelectedNodes([target]);
+        map.pasteNode(text);
+        assert.deepEqual(target.children.map(n => n.data.text), ['A', 'B']);
+        assert.equal(target.children[0].isExpand, false);
+        assert.equal(target.children[0].children[0].data.text, '**Child**');
+        press(map, 'z', { ctrlKey: true });
+        assert.equal(target.children.length, 0);
+        press(map, 'z', { ctrlKey: true });
+        assert.deepEqual(map.root.children, [a, b, target]);
+    }
+});
+
+test('cut protects roots, native text editing and failed clipboard writes', async () => {
+    const map = keyboardFixture();
+    const a = add(map, map.root, 'A');
+    let writes = 0;
+    clipboardNavigator.clipboard.writeText = async () => { writes++; throw Error('denied'); };
+    map.setSelectedNodes([map.root]);
+    await map.cutSelectedNodes();
+    assert.equal(writes, 0);
+    map.setSelectedNodes([a]);
+    a.edit();
+    assert.ok(!press(map, 'x', { ctrlKey: true }).defaultPrevented);
+    assert.equal(writes, 0);
+    a.cancelEdit(); map.editNode = null;
+    const before = notices.length;
+    press(map, 'x', { ctrlKey: true }); await nextTick();
+    assert.equal(writes, 1);
+    assert.deepEqual(map.root.children, [a]);
+    assert.equal(map.exec.history.undos.length, 0);
+    assert.equal(notices.length, before + 1);
+    assert.ok(!press(map, 'x', { ctrlKey: true, target: { closest: () => ({}) } }).defaultPrevented);
+    map.view.app.workspace.getActiveViewOfType = () => null;
+    assert.ok(!press(map, 'x', { ctrlKey: true }).defaultPrevented);
+});
+
+test('delayed cut never deletes edited, removed or inactive nodes', async () => {
+    for (const change of ['text', 'editor', 'removed', 'inactive']) {
+        const map = keyboardFixture(); const a = add(map, map.root, 'A');
+        map.setSelectedNodes([a]);
+        let resolve;
+        clipboardNavigator.clipboard.writeText = () => new Promise(done => { resolve = done; });
+        const pending = map.cutSelectedNodes();
+        if (change === 'text') a.data.text = 'Changed';
+        if (change === 'editor') a.edit();
+        if (change === 'removed') map.removeNode(a);
+        if (change === 'inactive') map.view.app.workspace.getActiveViewOfType = () => null;
+        resolve(); await pending;
+        assert.equal(map.exec.history.undos.length, 0);
+        if (change !== 'removed') assert.deepEqual(map.root.children, [a]);
+    }
+});

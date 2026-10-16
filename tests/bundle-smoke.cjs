@@ -37,9 +37,12 @@ function key(key, props = {}) {
 }
 key('Tab');
 key('Enter');
+map.cutSelectedNodes = () => operations.push(['cut']);
+key('x', { ctrlKey: true });
+key('x', { metaKey: true });
 key('z', { ctrlKey: true });
 key('y', { ctrlKey: true });
-assert.deepEqual(operations.map(([command]) => command), ['addChildNode', 'addSiblingNode', 'undo', 'redo']);
+assert.deepEqual(operations.map(([command]) => command), ['addChildNode', 'addSiblingNode', 'cut', 'cut', 'undo', 'redo']);
 assert.equal(operations[1][1].index, 1);
 map.root = { children: [] };
 const a = { parent: map.root, children: [], data: {} };
@@ -53,9 +56,9 @@ assert.equal(roots[0], a);
 assert.equal(roots[1], b);
 map._menuDom = { style: {} };
 map.deleteSelectedNodes();
-assert.equal(operations[4][0], 'removeNodes');
-assert.equal(operations[4][1].nodes.length, 2);
-console.log('Release bundle keyboard smoke check passed (Tab, Enter, Ctrl+Z/Y).');
+assert.equal(operations[6][0], 'removeNodes');
+assert.equal(operations[6][1].nodes.length, 2);
+console.log('Release bundle keyboard smoke check passed (Tab, Enter, Ctrl/Cmd+X, Ctrl+Z/Y).');
 
 // Exercise the bundled parser cleanup: empty content is a real node, not a wrapper.
 const cleanNode = vm.runInNewContext(`${declarations.get('cleanNode')}\ncleanNode`, {
