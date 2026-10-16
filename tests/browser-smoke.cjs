@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
+const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -44,6 +44,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 selectText(){ProdNode.prototype.selectText.call(this)}
                 edit(){ProdNode.prototype.edit.call(this)} cancelEdit(){ProdNode.prototype.cancelEdit.call(this)}
                 setText(text){ProdNode.prototype.setText.call(this,text)} parseText(){ProdNode.prototype.parseText.call(this)} _delay(){}
+                isLeaf(){return this.children.length===0}
                 getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
                 select(preserve){ProdNode.prototype.select.call(this,preserve)} unSelect(){ProdNode.prototype.unSelect.call(this)}
                 getBox(){return {x:parseFloat(this.containEl.style.left),y:parseFloat(this.containEl.style.top),width:this.containEl.offsetWidth,height:this.containEl.offsetHeight}}
@@ -84,7 +85,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
+            Object.assign(window,{Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -549,6 +550,11 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             renderStylePresetSettings(settings,stylePlugin);
         });
         const settings=page.locator('#preset-settings');
+        assert.equal(await settings.locator('.mm-preset-settings').evaluate(el=>el.open),false);
+        assert.equal(await settings.getByLabel('Preset name',{exact:true}).isVisible(),false);
+        await settings.locator('.mm-preset-settings > summary').click();
+        assert.equal(await settings.getByLabel('Preset name',{exact:true}).isVisible(),false);
+        await settings.locator('.mm-preset-card > summary').click();
         await settings.getByLabel('Preset name',{exact:true}).fill('结论');
         assert.equal(await settings.locator('input[type=text]').count(),1,'Only the preset name is a text field');
         await settings.getByRole('button',{name:'Blue',exact:true}).click();
@@ -586,6 +592,10 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await presetSelect.locator('option:checked').textContent(),'Missing preset: 重点');
         await settings.getByRole('button',{name:'Add style preset',exact:true}).click();
         assert.equal(await settings.locator('.mm-preset-card').count(),1);
+        assert.equal(await settings.locator('.mm-preset-card').evaluate(el=>el.open),true);
+        await settings.locator('.mm-preset-settings > summary').click();
+        assert.equal(await settings.getByLabel('Preset name',{exact:true}).isVisible(),false);
+        await page.screenshot({path:path.join(screenshotDir,'style-settings-collapsed.png')});
         await settings.evaluate(el=>el.remove());
         await page.screenshot({path:path.join(screenshotDir,'style-panel.png')});
         await presetSelect.selectOption('');
@@ -594,6 +604,26 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
         await page.evaluate(()=>{stylePanel.destroy();testMap.view.panel=null;});
         assert.equal(await page.locator('.mm-side-panel').count(),0);
+        await page.evaluate(()=>{
+            const branch=testMap.root.children[0];
+            branch.setText('Ordinary styled branch');
+            testMap.setting.nodeStylePresets=[{name:'条件',color:'#43a047',fontSize:15,bold:true}];
+            testMap.setSelectedNodes([branch]);
+            const previous=testMap.refresh.bind(testMap);
+            testMap.refresh=()=>{for(const n of testMap.root.children) Layout.prototype._setDirect.call(Layout.prototype,n,'right');previous();};
+            testMap.applyStylePreset('条件');
+            testMap.refresh();testMap.refresh();
+            window.styledBranch=branch;
+        });
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).color),'rgb(67, 160, 71)');
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).fontSize),'15px');
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).fontWeight),'700');
+        assert.ok(await page.evaluate(()=>styledBranch.containEl.classList.contains('mm-node-select')));
+        await page.evaluate(()=>testMap.undo());
+        assert.equal(await page.evaluate(()=>styledBranch.data.stylePreset),undefined);
+        await page.evaluate(()=>testMap.redo());
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).color),'rgb(67, 160, 71)');
+        await page.screenshot({path:path.join(screenshotDir,'style-branch-layout.png')});
         console.log('Style presets: settings save/rename/delete, alias references, live rendering, summary nodes, batch undo/redo, inspector toggle and cleanup passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

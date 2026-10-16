@@ -354,3 +354,8 @@
 .mm-preset-swatches button:focus-visible { outline: 2px solid var(--text-normal, #aaa); outline-offset: 3px; }
 .mm-preset-custom-color { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .mm-preset-custom-color input[type=color] { width: 48px; height: 32px; padding: 2px; cursor: pointer; }
+
+.mm-preset-settings { margin-bottom: 16px; border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 12px; }
+.mm-preset-settings > summary, .mm-preset-card > summary { cursor: pointer; font-weight: 600; }
+.mm-preset-card[open] > summary { margin-bottom: 14px; }
+.mm-preset-settings > summary:focus-visible, .mm-preset-card > summary:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; }

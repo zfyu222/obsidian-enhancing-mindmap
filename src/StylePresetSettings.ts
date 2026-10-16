@@ -35,8 +35,8 @@ export function renderPresetColorPicker(host: HTMLElement, initial: string | und
 
 /** Native controls keep this editor usable in both desktop and mobile settings. */
 export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
-    const section = document.createElement('section'); section.className = 'mm-preset-settings'; host.appendChild(section);
-    const title = document.createElement('h3'); title.textContent = t('Node style presets'); section.appendChild(title);
+    const section = document.createElement('details'); section.className = 'mm-preset-settings'; host.appendChild(section);
+    const title = document.createElement('summary'); title.textContent = t('Node style presets'); section.appendChild(title);
     const description = document.createElement('p'); description.className = 'setting-item-description';
     description.textContent = t('Preset settings description'); section.appendChild(description);
     const list = document.createElement('div'); section.appendChild(list);
@@ -45,8 +45,10 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
     const draw = () => {
         list.textContent = '';
         const presets: NodeStylePreset[] = plugin.settings.nodeStylePresets;
+        title.textContent = t('Node style presets') + ' (' + presets.length + ')';
         presets.forEach(preset => {
-            const card = document.createElement('div'); card.className = 'mm-preset-card'; list.appendChild(card);
+            const card = document.createElement('details'); card.className = 'mm-preset-card'; list.appendChild(card);
+            const cardTitle = document.createElement('summary'); cardTitle.textContent = preset.name; card.appendChild(cardTitle);
             const form = document.createElement('form'); card.appendChild(form);
             const field = (label: string, type: string, value: string) => {
                 const row = document.createElement('label'); row.className = 'mm-preset-field'; row.textContent = label;
@@ -81,7 +83,7 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
                 if (!renamePreset(presets, preset, value.name)) { error.textContent = t('Invalid preset name'); return; }
                 Object.assign(preset, value, {aliases: preset.aliases});
                 save.disabled = true;
-                try { await commit(); error.textContent = ''; save.textContent = t('Preset saved'); }
+                try { await commit(); cardTitle.textContent = preset.name; error.textContent = ''; save.textContent = t('Preset saved'); }
                 catch (_) { error.textContent = t('Unable to save presets'); }
                 finally { save.disabled = false; }
             });
@@ -97,7 +99,9 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
         do { name = t('New style') + ' ' + index++; } while (presets.some(p => p.name === name || p.aliases?.includes(name)));
         presets.push({name});
         await commit(); draw();
-        list.lastElementChild?.querySelector('input')?.focus();
+        section.open = true;
+        const card = list.lastElementChild as HTMLDetailsElement;
+        if (card) { card.open = true; card.querySelector('input')?.focus(); }
     });
     draw();
 }

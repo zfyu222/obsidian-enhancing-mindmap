@@ -12,6 +12,7 @@ const markdown = load('src/summary/markdown.ts');
 const selection = load('src/mindmap/selection.ts');
 const clipboard = load('src/mindmap/clipboard.ts', {'./selection':selection});
 const commands = load('src/mindmap/Cmds.ts', {'./selection':selection});
+const Layout = load('src/mindmap/Layout.ts').default;
 const StyleNodes = load('src/mindmap/StyleNodes.ts', {'./Cmds':commands}).default;
 const History = load('src/mindmap/History.ts').default;
 const MindMap = load('src/mindmap/mindmap.ts', {'./StyleNodes':{default:StyleNodes}}).default;
@@ -24,7 +25,7 @@ function node(text, parent, preset='重点') {
     const n={data:{id:'n-'+ ++serial,text,stylePreset:preset},parent,children:[],isExpand:true,
         getId(){return this.data.id},getData(){return {...this.data}},refreshBox(){},clearCacheData(){},
         containEl:{style:{setProperty:(k,v)=>values.set(k,v),removeProperty:k=>values.delete(k),getPropertyValue:k=>values.get(k)},
-            classList:{toggle:(k,v)=>v?classes.add(k):classes.delete(k),contains:k=>classes.has(k)}},
+            classList:{add:(...names)=>names.forEach(k=>classes.add(k)),remove:(...names)=>names.forEach(k=>classes.delete(k)),toggle:(k,v)=>v?classes.add(k):classes.delete(k),contains:k=>classes.has(k)}},
         getLevel(){return this.parent?this.parent.getLevel()+1:0}};
     if(parent) parent.children.push(n); else n.data.isRoot=true;
     return n;
@@ -99,4 +100,19 @@ test('style redo resolves recreated pasted nodes by ID instead of editing detach
     const replacement=node('A');replacement.data.id=a.getId();replacement.parent=map.root;delete replacement.data.stylePreset;
     map.root.children=[replacement];map.exec.history.redo();
     assert.equal(replacement.data.stylePreset,'重点');assert.equal(a.data.stylePreset,undefined);
+});
+
+test('real layout preserves branch presets, selection and editor state while updating direction classes',()=>{
+    const map=mapFixture(),branch=node('Ordinary styled branch',map.root,'重点'),child=node('Child',branch,'重点');
+    for(const n of [branch,child]) { n.isLeaf=()=>!n.children.length; styles.applyNodeStyle(n,map.setting.nodeStylePresets); }
+    branch.containEl.classList.add('mm-node-select','mm-edit-node','mm-node-left','mm-summary-node');
+    const layout=Object.create(Layout.prototype);
+    for(let index=0;index<3;index++) layout._setDirect(branch,'right');
+    for(const name of ['mm-preset-node','mm-preset-color','mm-node-select','mm-edit-node','mm-summary-node','mm-node-right','mm-node-second']) assert.ok(branch.containEl.classList.contains(name),name);
+    assert.equal(branch.containEl.classList.contains('mm-node-left'),false);
+    assert.ok(child.containEl.classList.contains('mm-preset-color'));
+    assert.equal(branch.containEl.style.getPropertyValue('--mm-preset-color'),'#e53935');
+    assert.equal(branch.data.stylePreset,'重点');
+    layout._setDirect(branch,'left');assert.ok(branch.containEl.classList.contains('mm-node-left'));
+    assert.equal(branch.containEl.classList.contains('mm-node-right'),false);
 });

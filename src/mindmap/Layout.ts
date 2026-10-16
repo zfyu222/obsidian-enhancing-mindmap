@@ -87,7 +87,8 @@ export default class Layout {
         n.direct = direct;
         var flag = n.containEl.classList.contains('mm-node-second');
      
-        n.containEl.setAttribute('class','');
+        // Layout owns direction/level/leaf/fold classes, not selection, editing or presets.
+        n.containEl.classList.remove('mm-node-left', 'mm-node-right', 'mm-node-second', 'mm-node-leaf', 'mm-node-collapse');
         n.containEl.classList.add('mm-node');
         n.containEl.classList.add('mm-node-' + direct);
         
