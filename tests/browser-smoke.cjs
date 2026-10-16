@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
+const names = ['validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -84,7 +84,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,extractSummaries,editorSelection,selectEditorOffsets});
+            Object.assign(window,{SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -507,6 +507,79 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.waitForFunction(()=>testMap.editNode?.data.summaryRoot && testMap.editNode.contentEl.innerText==='**Summary** words');
         assert.ok(await page.evaluate(()=>extractSummaries(testMap.getMarkdown()).entries.some(s=>s.root.text==='**Summary** words')));
         console.log('Text-format menu: native selection, Markdown emphasis, palette/custom/reset color, multiline offsets, save, undo/redo, Escape, IME and independent summary nodes passed.');
+        // Per-map inspector plus the actual settings editor, using the compiled code.
+        await page.setViewportSize({width:1600,height:900});
+        await page.evaluate(() => {
+            testMap.finishEditingForHistory();
+            testMap.setting.nodeStylePresets=[{name:'重点',color:'#e53935',fontSize:20,bold:true,italic:true}];
+            const host=testMap.containerEL.parentElement;
+            const body=document.createElement('div');body.className='mm-view-body';body.style.height='440px';
+            host.appendChild(body);body.appendChild(testMap.containerEL);
+            window.stylePanel=new MindMapPanel(testMap,body,()=>{window.manageClicked=true});
+            testMap.view.panel=stylePanel;
+            testMap.setSelectedNodes([testMap.root,testMap.summaries.items[0].root]);
+            window.beforeStyleUndos=testMap.exec.history.undos.length;
+        });
+        const presetSelect=page.locator('.mm-side-panel select');
+        await presetSelect.selectOption('重点');
+        assert.deepEqual(errors,[]);
+        assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),await page.evaluate(()=>beforeStyleUndos+1));
+        assert.equal(await page.evaluate(()=>testMap.summaries.items[0].root.data.stylePreset),'重点');
+        assert.ok(await page.evaluate(()=>testMap.getMarkdown().includes('<!-- mm:style {"name":"重点"} -->')));
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).color),'rgb(229, 57, 53)');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontStyle),'italic');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontSize),'20px');
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),undefined);
+        await page.evaluate(()=>testMap.redo());
+        assert.equal(await presetSelect.inputValue(),'重点');
+        await page.getByRole('button',{name:'Toggle mind map panel',exact:true}).click();
+        assert.equal(await page.locator('.mm-side-panel').isVisible(),false);
+        await page.getByRole('button',{name:'Toggle mind map panel',exact:true}).click();
+        await page.getByRole('button',{name:'Manage style presets',exact:true}).click();
+        assert.equal(await page.evaluate(()=>manageClicked),true);
+        await page.evaluate(()=>{
+            const settings=document.createElement('div');settings.id='preset-settings';
+            settings.style.cssText='position:fixed;right:12px;top:12px;width:370px;height:820px;overflow:auto;background:#292d36;color:white;z-index:2000;padding:16px';
+            document.body.appendChild(settings);
+            window.stylePlugin={settings:{nodeStylePresets:testMap.setting.nodeStylePresets},saveSettings:async()=>{
+                window.savedPresetData=JSON.stringify(stylePlugin.settings);
+                testMap.setting.nodeStylePresets=stylePlugin.settings.nodeStylePresets;testMap.refreshNodeStyles();
+            }};
+            renderStylePresetSettings(settings,stylePlugin);
+        });
+        const settings=page.locator('#preset-settings');
+        await settings.getByLabel('Preset name',{exact:true}).fill('结论');
+        await settings.getByLabel('Text color hex',{exact:true}).fill('#22aa88');
+        await settings.getByLabel('Italic',{exact:true}).uncheck();
+        await settings.getByLabel('Underline',{exact:true}).check();
+        await settings.getByRole('button',{name:'Save preset',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点','Existing notes keep the original name alias');
+        assert.equal(await presetSelect.inputValue(),'结论');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).color),'rgb(34, 170, 136)');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontStyle),'normal');
+        assert.match(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).textDecorationLine),/underline/);
+        assert.ok(await page.evaluate(()=>JSON.parse(savedPresetData).nodeStylePresets[0].aliases.includes('重点')));
+        await page.screenshot({path:path.join(screenshotDir,'style-presets.png')});
+        // Invalid names cannot change the active preset; delete retains unresolved note references.
+        await settings.getByLabel('Preset name',{exact:true}).fill('');
+        await settings.getByRole('button',{name:'Save preset',exact:true}).click();
+        assert.ok((await settings.locator('[role=alert]').textContent()).length);
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets[0].name),'结论');
+        await settings.getByRole('button',{name:'Delete preset',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
+        assert.equal(await presetSelect.locator('option:checked').textContent(),'Missing preset: 重点');
+        await settings.getByRole('button',{name:'Add style preset',exact:true}).click();
+        assert.equal(await settings.locator('.mm-preset-card').count(),1);
+        await settings.evaluate(el=>el.remove());
+        await page.screenshot({path:path.join(screenshotDir,'style-panel.png')});
+        await presetSelect.selectOption('');
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),undefined);
+        await page.evaluate(()=>testMap.undo());
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
+        await page.evaluate(()=>{stylePanel.destroy();testMap.view.panel=null;});
+        assert.equal(await page.locator('.mm-side-panel').count(),0);
+        console.log('Style presets: settings save/rename/delete, alias references, live rendering, summary nodes, batch undo/redo, inspector toggle and cleanup passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

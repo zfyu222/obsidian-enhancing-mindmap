@@ -1,3 +1,4 @@
+import MindMapPanel from './MindMapPanel';
 import {
   HoverParent,
   FileManager,
@@ -41,6 +42,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   id: string = (this.leaf as any).id;
   mindmap: MindMap | null;
   toolbar: MindMapToolbar | null;
+  panel: MindMapPanel | null;
   colors: string[] = [];
   timeOut: any = null;
   fileCache: any;
@@ -336,6 +338,8 @@ export class MindMapView extends TextFileView implements HoverParent {
 
 
   async onClose() {
+    this.panel?.destroy();
+    this.panel = null;
     this.toolbar?.destroy();
     this.toolbar = null;
     // Remove draggables from render, as the DOM has already detached
@@ -358,6 +362,8 @@ export class MindMapView extends TextFileView implements HoverParent {
   }
 
   setViewData(data: string) {
+    this.panel?.destroy();
+    this.panel = null;
     this.toolbar?.destroy();
     this.toolbar = null;
 
@@ -389,9 +395,14 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.contentEl.classList.add('mm-view');
     const viewport = document.createElement('div');
     viewport.className = 'mm-viewport';
-    this.contentEl.appendChild(viewport);
+    const body = document.createElement('div'); body.className = 'mm-view-body';
+    this.contentEl.appendChild(body); body.appendChild(viewport);
     this.mindmap = new MindMap(mindData, viewport, this.plugin.settings);
     this.toolbar = new MindMapToolbar(this.mindmap, this.contentEl);
+    this.panel = new MindMapPanel(this.mindmap, body, () => {
+      const settings = (this.app as any).setting;
+      settings.open(); settings.openTabById(this.plugin.manifest.id);
+    });
     this.mindmap.colors = this.colors;
     if (this.firstInit) {
 
@@ -411,6 +422,7 @@ export class MindMapView extends TextFileView implements HoverParent {
         this.mindmap.refresh();
         this.mindmap.view = this;
         this.toolbar?.update();
+        this.panel?.update();
         this.firstInit = false;
       }, 100);
     } else {
@@ -424,10 +436,13 @@ export class MindMapView extends TextFileView implements HoverParent {
       this.mindmap.refresh();
       this.mindmap.view = this;
       this.toolbar?.update();
+      this.panel?.update();
     }
   }
 
   onunload() {
+    this.panel?.destroy();
+    this.panel = null;
     this.toolbar?.destroy();
     this.toolbar = null;
     this.app.workspace.offref("quick-preview");
@@ -518,6 +533,7 @@ export class MindMapView extends TextFileView implements HoverParent {
       var map: INodeData = {
         id: marker.id || id || uuid(),
         summaryMember: !!marker.id,
+        stylePreset: prepared.styles.get(mapData.p?.lines?.[0]),
         text: id ? mapData.v.replace(new RegExp(` ?\\^${id}$`, 'im'), '') : mapData.v,
         children: [],
         expanded: id ? false:true
@@ -535,6 +551,8 @@ export class MindMapView extends TextFileView implements HoverParent {
     if (str) {
       const { root } = transformer.transform(prepared.text);
       const data = transformData(root);
+      // A list-only document with one top-level item has that item as its map root.
+      if (root.t === 'root' && !data.text && data.children?.length === 1) return data.children[0];
       return data;
 
     } else {

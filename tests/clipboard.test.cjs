@@ -15,7 +15,7 @@ function load(file, dependencies = {}) {
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
-    vm.runInNewContext(code, { module, exports: module.exports, require: id => dependencies[id] || {}, console, setTimeout, clearTimeout, document: dom, window: {}, navigator: clipboardNavigator });
+    vm.runInNewContext(code, { module, exports: module.exports, require: id => id.endsWith("nodeStyles") ? load("src/nodeStyles.ts") : dependencies[id] || {}, console, setTimeout, clearTimeout, document: dom, window: {}, navigator: clipboardNavigator });
     return module.exports;
 }
 const selection = load('src/mindmap/selection.ts');

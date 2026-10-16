@@ -1,3 +1,5 @@
+import { NodeStylePreset, styleMarker, applyNodeStyle, findPreset } from '../nodeStyles';
+import StyleNodes from './StyleNodes';
 import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
 import TextFormatMenu from './text-format'
@@ -20,6 +22,7 @@ let addIcon = '<svg class="icon" width="16px" height="16.00px" viewBox="0 0 1024
 let tempDispLevel = 0;
 
 interface Setting {
+    nodeStylePresets?: NodeStylePreset[];
     theme?: string;
     canvasSize?: number;
     background?: string;
@@ -2169,6 +2172,20 @@ export default class MindMap {
         this.emit('toolbarChange');
         return result;
     }
+    applyStylePreset(name?: string) {
+        if (this.isComposing || (name && !findPreset(this.setting.nodeStylePresets || [], name))) return;
+        this.finishEditingForHistory();
+        const nodes = this.getSelectedNodes();
+        if (!nodes.length) return;
+        this.exec.history.execute(new StyleNodes(this, nodes, name));
+        this.emit('toolbarChange');
+    }
+    refreshNodeStyles() {
+        if (!this.root) return;
+        this.traverseAll((node: INode) => applyNodeStyle(node, this.setting.nodeStylePresets || []));
+        this.refresh();
+        this.emit('toolbarChange');
+    }
     finishEditingForHistory() {
         const editor = this.editNode || (this.selectNode?.data.isEdit ? this.selectNode : null);
         if (editor?.data.isEdit) editor.cancelEdit();
@@ -2458,7 +2475,7 @@ export default class MindMap {
         this.traverseDF((node: INode) => {
             const text: string = node.data.text.trim();
             const parts = text.split('\n');
-            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + (node.data.summaryMember ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
+            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + (node.data.stylePreset ? styleMarker(node.data.stylePreset) : '') + (node.data.summaryMember ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
             if (node.getLevel() < level) {
                 const block = /^(```|~~~|\|)/.test(text);
                 lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);
@@ -2468,9 +2485,8 @@ export default class MindMap {
                 const indent = '\t'.repeat(node.getLevel()-level);
                 // Metadata belongs on the structural list line, outside code fences/tables.
                 if (/^(```|~~~|\|)/.test(text)) {
-                    lines.push('', `${indent}-${ending}`);
+                    lines.push(`${indent}-${ending}`);
                     parts.forEach(part => lines.push(`${indent}  ${part}`));
-                    lines.push('');
                 } else {
                     lines.push(`${indent}-` + (text ? ' ' + (parts.shift() || '') : '') + ending);
                     if (text) parts.forEach(part => lines.push(`${indent}  ${part}`));

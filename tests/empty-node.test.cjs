@@ -11,7 +11,7 @@ function load(file, dependencies = {}) {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(code, { module, exports: module.exports,
-        require: id => dependencies[id] || {}, console,
+        require: id => id.endsWith("nodeStyles") ? load("src/nodeStyles.ts") : dependencies[id] || {}, console,
         setTimeout, clearTimeout, document: { createElement: () => ({ style: {} }) }, window: {} });
     return module.exports;
 }

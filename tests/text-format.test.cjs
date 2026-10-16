@@ -33,7 +33,7 @@ test('italic can format part of a word and combines with bold without removing i
  assert.equal(formatSelection(both.text,both.start,both.end,'bold').text,'*word*');
 });
 test('formatted main nodes survive the production Markdown parser with stable member IDs',()=>{
- function load(file,deps={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,require:id=>deps[id]||{}});return m.exports;}
+ function load(file,deps={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,require:id=>id.endsWith("nodeStyles") ? load("src/nodeStyles.ts") : deps[id]||{}});return m.exports;}
  const markdown=load('src/summary/markdown.ts'),parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');
  const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{}},'./markmapLib/markmap-lib':parser,'./summary/markdown':markdown}).MindMapView;
  const styled='前**<span style="color:#e53935">重点</span>**后';const data=View.prototype.mdToData.call({},'# Main\n- '+styled+' <!-- mm:node {"id":"member-a"} -->');

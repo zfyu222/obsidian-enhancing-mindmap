@@ -1,4 +1,6 @@
+import { NodeStylePreset } from './nodeStyles';
 export class MindMapSettings {
+    nodeStylePresets: NodeStylePreset[] = [];
     theme:string = 'dark';
     canvasSize:number = 8000;
     background:string = 'transparent';

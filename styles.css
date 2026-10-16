@@ -314,3 +314,30 @@
 .mm-text-format-separator { margin: 4px 0; border-top: 1px solid var(--background-modifier-border, #ddd); }
 .mm-text-custom-color { gap: 8px; }
 .mm-text-custom-color input { flex-shrink: 0; margin-left: auto; width: 28px; height: 22px; padding: 0; border: 0; }
+
+/* Presets affect the rendered node; inline Markdown formatting stays intact. */
+.mm-node.mm-preset-node:not(.mm-edit-node) > .mm-node-content {
+  font-weight: var(--mm-preset-weight, normal);
+  font-style: var(--mm-preset-italic, normal);
+  text-decoration: var(--mm-preset-decoration, none);
+}
+.mm-node.mm-preset-color:not(.mm-edit-node) > .mm-node-content { color: var(--mm-preset-color); }
+.mm-node.mm-preset-size:not(.mm-edit-node) > .mm-node-content { font-size: var(--mm-preset-font-size); }
+.mm-view-body { display: flex; flex: 1 1 0; min-height: 0; min-width: 0; position: relative; }
+.mm-side-panel {
+  flex: 0 0 230px; width: 230px; padding: 14px; overflow: auto; box-sizing: border-box;
+  border-left: 1px solid var(--background-modifier-border); background: var(--background-secondary);
+  color: var(--text-normal); z-index: 55;
+}
+.mm-side-panel[hidden] { display: none; }
+.mm-side-panel h3 { margin: 0 0 20px; font-size: 16px; }
+.mm-side-panel h4 { margin: 0 0 8px; font-size: 14px; }
+.mm-side-panel select, .mm-side-panel button { width: 100%; margin: 0 0 12px; }
+.mm-panel-status { color: var(--text-muted); font-size: 13px; }
+.mm-preset-card { padding: 14px; margin: 12px 0; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.mm-preset-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; }
+.mm-preset-field input:not([type=checkbox]) { max-width: 55%; }
+.mm-node.mm-preset-preview { position: static; margin: 16px 0; padding: 8px; background: var(--background-primary); }
+.mm-preset-actions { display: flex; gap: 8px; }
+.mm-preset-error { color: var(--text-error); }
+@media (max-width: 600px) { .mm-side-panel { position: absolute; right: 0; top: 0; bottom: 0; width: min(230px, 85%); box-shadow: -4px 0 12px #0002; } }

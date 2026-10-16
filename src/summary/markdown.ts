@@ -1,3 +1,4 @@
+import { readStyleMarker, styleMarker } from '../nodeStyles';
 export interface SummaryData { id: string; memberIds: string[]; root: any }
 const START = '<!-- mm:summaries:start {"version":1} -->';
 const END = '<!-- mm:summaries:end -->';
@@ -27,7 +28,7 @@ export function extractSummaries(markdown: string) {
             if (typeof meta.id !== 'string' || !/^[\w-]{1,128}$/.test(meta.id) || ids.has(meta.id) || !Array.isArray(meta.members) || !meta.members.length || meta.members.some((id: any) => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) || new Set(meta.members).size !== meta.members.length) throw Error('Invalid summary references');
             if (Object.keys(meta).some(key=>!['id','members','expanded'].includes(key))) throw Error('Unknown summary metadata');
             ids.add(meta.id);
-            const root: any = { id: meta.id, text: header[1], expanded: meta.expanded !== false, children: [] };
+            const root: any = { id: meta.id, text: readStyleMarker(header[1]).text, stylePreset: readStyleMarker(header[1]).name, expanded: meta.expanded !== false, children: [] };
             const stack: any[] = [root];
             let current = root, fence = /^\s*(```|~~~)/.test(root.text);
             for (const line of lines) {
@@ -40,7 +41,7 @@ export function extractSummaries(markdown: string) {
                     if (info.id && (typeof info.id !== 'string' || !/^[\w-]{1,128}$/.test(info.id) || ids.has(info.id))) throw Error('Duplicate summary node ID');
                     if (info.id) ids.add(info.id);
                     if (Object.keys(info).some(key=>!['id','expanded'].includes(key))) throw Error('Unknown summary node metadata');
-                    const node: any = { id: info.id || '', text: item[2], expanded: info.expanded !== false, children: [] };
+                    const node: any = { id: info.id || '', text: readStyleMarker(item[2]).text, stylePreset: readStyleMarker(item[2]).name, expanded: info.expanded !== false, children: [] };
                     stack[depth].children.push(node); stack[depth + 1] = node; stack.length = depth + 2;
                     current = node; fence = /^\s*(```|~~~)/.test(item[2]);
                 } else {
@@ -62,11 +63,11 @@ export function summaryMarkdown(entries: SummaryData[]): string {
     if (!entries.length) return '';
     const chunks = entries.map(entry => {
         const lines = entry.root.text.split('\n');
-        let out = `### ${lines.shift() || ''} <!-- mm:summary ${JSON.stringify({ id: entry.id, members: entry.memberIds, expanded: entry.root.expanded !== false })} -->\n`;
+        let out = `### ${lines.shift() || ''}${entry.root.stylePreset ? styleMarker(entry.root.stylePreset) : ''} <!-- mm:summary ${JSON.stringify({ id: entry.id, members: entry.memberIds, expanded: entry.root.expanded !== false })} -->\n`;
         if (lines.length) out += lines.join('\n') + '\n';
         const visit = (node: any, depth: number) => {
             const text = node.text.split('\n');
-            out += '  '.repeat(depth) + '- ' + (text.shift() || '') + ` <!-- mm:item ${JSON.stringify({ id: node.id, expanded: node.expanded !== false })} -->\n`;
+            out += '  '.repeat(depth) + '- ' + (text.shift() || '') + (node.stylePreset ? styleMarker(node.stylePreset) : '') + ` <!-- mm:item ${JSON.stringify({ id: node.id, expanded: node.expanded !== false })} -->\n`;
             text.forEach((line: string) => { out += '  '.repeat(depth + 1) + line + '\n'; });
             node.children.forEach((child: any) => visit(child, depth + 1));
         };
@@ -84,17 +85,25 @@ export function readNodeMarker(text: string) {
 
 export function prepareMainMarkdown(source: string) {
     const markers = new Map<number, string>();
+    const styles = new Map<number, string>();
+    const emptyItems = new Set<number>();
     const original = source.split('\n');
     let fence = '';
     const lines = original.map((line, index) => {
         const delimiter = /^\s*(`{3,}|~{3,})/.exec(line);
         if (delimiter) { if (!fence) fence = delimiter[1][0]; else if (delimiter[1][0] === fence) fence = ''; }
         if (fence || delimiter) return line;
-        const marker = readNodeMarker(line);
-        if (marker.id) { markers.set(index, marker.id); return marker.text; }
-        return line;
+        const structural = /^(?:#{1,6}(?:\s|$)|\s*(?:[-*+]|\d+\.)(?:\s|$))/.test(line);
+        const styled = structural ? readStyleMarker(line) : {text: line};
+        if (styled.name) styles.set(index, styled.name);
+        const marker = readNodeMarker(styled.text);
+        if (marker.id) markers.set(index, marker.id);
+        if (/^\s*[-*+]\s*$/.test(marker.text)) emptyItems.add(index);
+        return marker.text;
     });
-    return { text: lines.join('\n'), lines, markers };
+    // A bare dash below text can be parsed as a setext heading. Give the parser
+    // an invisible placeholder; sourceNodeContent still reads the untouched lines.
+    return { styles, text: lines.map((line, index) => emptyItems.has(index) ? line + ' \u200b' : line).join('\n'), lines, markers };
 }
 export function sourceNodeContent(node: any, prepared: ReturnType<typeof prepareMainMarkdown>) {
     const start = node.p?.lines?.[0];

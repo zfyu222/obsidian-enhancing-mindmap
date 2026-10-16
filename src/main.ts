@@ -1,3 +1,4 @@
+import { normalizePresets } from './nodeStyles';
 import {
   Plugin,
   WorkspaceLeaf,
@@ -1226,12 +1227,18 @@ export default class MindMapPlugin extends Plugin {
       fontSize: 16,
       background: 'transparent',
       layout: 'mindmap',
-      layoutDirect: 'mindmap'
+      layoutDirect: 'mindmap',
+      nodeStylePresets: []
     }, await this.loadData());
+    this.settings.nodeStylePresets = normalizePresets(this.settings.nodeStylePresets);
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.app.workspace.getLeavesOfType(mindmapViewType).forEach(leaf => {
+      const map = (leaf.view as MindMapView).mindmap;
+      if (map) { map.setting.nodeStylePresets = this.settings.nodeStylePresets; map.refreshNodeStyles(); }
+    });
   }
 
   async setMarkdownView(leaf: WorkspaceLeaf) {

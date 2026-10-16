@@ -1,3 +1,4 @@
+import { applyNodeStyle } from '../nodeStyles';
 import MindMap from './mindmap'
 import {MarkdownRenderer,normalizePath,TFile,parseLinktext,resolveSubpath} from 'obsidian'
 import {t} from '../lang/helpers'
@@ -40,6 +41,7 @@ interface BOX {
 
 export class INodeData implements INode{
     summaryMember?: boolean;
+    stylePreset?: string;
     id:string;
     text:string;
     pid?:string;
@@ -115,6 +117,7 @@ export default class Node {
 
     parseText(){
         MarkdownRenderer.renderMarkdown( this.data.text ,this.contentEl,this.mindmap.path||"",null).then(()=>{
+            if (this.data.stylePreset) applyNodeStyle(this, this.mindmap?.setting?.nodeStylePresets || []);
             this.data.mdText = this.contentEl.innerHTML;
             this.refreshBox();
             this.mindmap&&this.mindmap.emit('initNode',{});

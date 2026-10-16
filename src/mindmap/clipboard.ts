@@ -54,7 +54,7 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
             const copyTree = (node: any, depth = 0): any => {
                 if (depth > 100 || !node || typeof node.id !== 'string' || typeof node.text !== 'string' || used.has(node.id) || !Array.isArray(node.children)) throw Error('Invalid summary clipboard');
                 used.add(node.id);
-                return {id:createId(),text:node.text,expanded:node.expanded!==false,children:node.children.map((child:any)=>copyTree(child,depth+1))};
+                return {id:createId(),text:node.text,stylePreset:node.stylePreset,expanded:node.expanded!==false,children:node.children.map((child:any)=>copyTree(child,depth+1))};
             };
             (result as any).summaries = payload.summaries.map((summary:any)=>{
                 if (!summary || !Array.isArray(summary.memberIds) || !summary.memberIds.length || summary.memberIds.some((id:string)=>!ids.has(id))) throw Error('Invalid summary clipboard references');

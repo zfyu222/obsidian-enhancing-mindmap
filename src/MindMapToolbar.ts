@@ -48,6 +48,7 @@ export default class MindMapToolbar {
       redo: '<path d="m15 4 5 5-5 5m5-5h-9a7 7 0 0 0-7 7v4"/>',
       zoomOut: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6"/>',
       zoomIn: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6m-3-3v6"/>',
+      panel: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M15 4v16"/>',
       center: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="12" cy="12" r="3"/>'
     };
     const button = (id: string, label: string, title: string, action: () => void) => {
@@ -95,6 +96,7 @@ export default class MindMapToolbar {
     button('reset', '100%', t('Reset zoom'), () => map.scale(100));
     button('zoomIn', '+', t('Zoom in'), () => map.scale(map.mindScale + 10));
     button('center', t('Center map'), t('Center map'), () => map.center());
+    button('panel', t('Mind map panel'), t('Toggle mind map panel'), () => map.view?.panel?.toggle());
     map.on('toolbarChange', this.update);
     map.on('mindMapChange', this.update);
     map.appEl.addEventListener('input', this.update);

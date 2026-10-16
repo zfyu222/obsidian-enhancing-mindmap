@@ -1,3 +1,4 @@
+import { renderStylePresetSettings } from './StylePresetSettings';
 import {
     App,
     PluginSettingTab,
@@ -19,6 +20,7 @@ export class MindMapSettingsTab extends PluginSettingTab {
         const { containerEl } = this;
 
         containerEl.empty();
+        renderStylePresetSettings(containerEl, this.plugin);
 
         new Setting(containerEl)
             .setName(`${t('Canvas size')}`)

@@ -129,7 +129,7 @@ export default class SummaryManager {
     importPaste(entries: SummaryData[]) { entries.forEach(entry=>this.items.push({...entry,root:this.createTree(entry.root,entry.id),side:''})); }
     removeRoot(root: any) { const index = this.items.findIndex(item=>item.root===root); if (index>=0) this.items.splice(index,1); this.map._removeChildDom(root); return index; }
     data(): SummaryData[] {
-        const toData = (node: any): any => ({ id: node.getId(), text: node.data.text, expanded: node.isExpand, children: node.children.map(toData) });
+        const toData = (node: any): any => ({ id: node.getId(), text: node.data.text, stylePreset: node.data.stylePreset, expanded: node.isExpand, children: node.children.map(toData) });
         return this.items.map(item=>({ id:item.id, memberIds:item.memberIds, root:toData(item.root) }));
     }
     markdown() { return [summaryMarkdown(this.data()), this.preserved].filter(Boolean).join('\n\n'); }
