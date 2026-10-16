@@ -61,11 +61,18 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
             const name = field(t('Preset name'), 'text', preset.name); name.maxLength = 80;
             const color = renderPresetColorPicker(form, preset.color, () => { updatePreview(); save.textContent = t('Save preset'); });
             const size = field(t('Preset font size'), 'number', preset.fontSize?.toString() || ''); size.min = '8'; size.max = '72';
+            const configuredSize = Number(plugin.settings.fontSize);
+            const defaultSize = Number.isFinite(configuredSize) && configuredSize > 0 ? configuredSize : 16;
+            size.classList.add('mm-preset-font-size');
+            size.placeholder = `${t('Default')} (${defaultSize})`;
+            size.title = `${t('Global default font size')}: ${defaultSize} px`;
+            const sizeHint = document.createElement('div'); sizeHint.className = 'mm-preset-size-hint';
+            sizeHint.textContent = `${t('Global default font size')}: ${defaultSize} px`; form.appendChild(sizeHint);
             const toggles: Record<string, HTMLInputElement> = {};
             for (const [key, label] of [['bold', 'Bold'], ['italic', 'Italic'], ['underline', 'Underline'], ['strike', 'Strikethrough']]) {
                 const input = field(t(label as any), 'checkbox', ''); input.checked = !!(preset as any)[key]; toggles[key] = input;
             }
-            const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview';
+            const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview'; preview.style.fontSize = defaultSize + 'px';
             const content = document.createElement('div'); content.className = 'mm-node-content'; content.textContent = t('Preset preview'); preview.appendChild(content); form.appendChild(preview);
             const error = document.createElement('p'); error.className = 'mm-preset-error'; error.setAttribute('role', 'alert'); form.appendChild(error);
             const draft = (): NodeStylePreset => ({...preset, name: name.value.trim(), color: color.value.trim() || undefined,

@@ -1,6 +1,7 @@
 // 简体中文
 
 export default {
+    "Global default font size": "全局默认字号",
     "Mixed font sizes": "不同字号",
     "Current font size": "当前字号",
     "Save node style as preset": "保存节点样式为预设",

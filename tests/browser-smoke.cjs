@@ -555,6 +555,13 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await settings.locator('.mm-preset-settings > summary').click();
         assert.equal(await settings.getByLabel('Preset name',{exact:true}).isVisible(),false);
         await settings.locator('.mm-preset-card > summary').click();
+        const presetSize=settings.getByLabel('Preset font size',{exact:true});
+        assert.equal(await presetSize.getAttribute('placeholder'),'Default (16)');
+        assert.equal(await settings.locator('.mm-preset-size-hint').textContent(),'Global default font size: 16 px');
+        await presetSize.fill('');
+        assert.equal(await settings.locator('.mm-preset-preview .mm-node-content').evaluate(el=>getComputedStyle(el).fontSize),'16px');
+        await presetSize.fill('20');
+        await page.screenshot({path:path.join(screenshotDir,'preset-default-font-size.png')});
         await settings.getByLabel('Preset name',{exact:true}).fill('结论');
         assert.equal(await settings.locator('input[type=text]').count(),1,'Only the preset name is a text field');
         await settings.getByRole('button',{name:'Blue',exact:true}).click();
@@ -590,7 +597,10 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await settings.getByRole('button',{name:'Delete preset',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
         assert.equal(await presetSelect.locator('option:checked').textContent(),'Missing preset: 重点');
+        await page.evaluate(()=>stylePlugin.settings.fontSize=18);
         await settings.getByRole('button',{name:'Add style preset',exact:true}).click();
+        assert.equal(await settings.getByLabel('Preset font size',{exact:true}).getAttribute('placeholder'),'Default (18)');
+        assert.equal(await settings.getByLabel('Preset font size',{exact:true}).inputValue(),'');
         assert.equal(await settings.locator('.mm-preset-card').count(),1);
         assert.equal(await settings.locator('.mm-preset-card').evaluate(el=>el.open),true);
         await settings.locator('.mm-preset-settings > summary').click();

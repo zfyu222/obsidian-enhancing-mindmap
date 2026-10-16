@@ -379,3 +379,6 @@
 .mm-panel-save-preset[hidden] { display: none; }
 .mm-panel-save-preset label { display: block; margin-bottom: 10px; }
 .mm-panel-save-preset input { width: 100%; margin-top: 6px; }
+
+.mm-preset-field input.mm-preset-font-size { width: 115px; min-width: 105px; }
+.mm-preset-size-hint { margin: -4px 0 12px; font-size: var(--font-ui-smaller, 12px); color: var(--text-muted); }
