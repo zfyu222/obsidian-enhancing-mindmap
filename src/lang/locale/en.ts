@@ -1,6 +1,8 @@
 // English
 
 export default {
+    "Mixed font sizes": "Mixed font sizes",
+    "Current font size": "Current font size",
     "Save node style as preset": "Save node style as preset",
     "New preset name": "New preset name",
     "Cancel saving preset": "Cancel saving preset",

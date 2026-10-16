@@ -605,6 +605,15 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         // Shared sidebar controls target nodes, or a preserved range in a node editor.
         const inspector=page.locator('.mm-side-panel');
         await page.evaluate(()=>{testMap.setSelectedNodes([testMap.root]);delete testMap.root.data.nodeStyle;testMap.refreshNodeStyles();});
+        const sidebarSize=inspector.getByLabel('Font size',{exact:true});
+        assert.equal(await sidebarSize.inputValue(),'');
+        assert.equal(await sidebarSize.getAttribute('placeholder'),'Default (16)');
+        await page.evaluate(()=>{testMap.root.containEl.classList.add('mm-root');testMap.emit('toolbarChange');});
+        assert.equal(await sidebarSize.getAttribute('placeholder'),'Default (25.6)','Default includes the root node size multiplier');
+        await page.evaluate(()=>{testMap.setSelectedNodes([testMap.root,testMap.summaries.items[0].root]);});
+        assert.equal(await sidebarSize.getAttribute('placeholder'),'Mixed font sizes');
+        await page.evaluate(()=>{testMap.root.containEl.classList.remove('mm-root');testMap.setSelectedNodes([testMap.root]);});
+        assert.equal(await sidebarSize.getAttribute('title'),'Current font size: 16 px');
         await inspector.getByRole('button',{name:'Red',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.color),'#e53935');
         await inspector.getByRole('button',{name:'Bold',exact:true}).click();
@@ -642,6 +651,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
+        assert.equal(await sidebarSize.getAttribute('placeholder'),'Default (16)','Text without explicit size shows its inherited size');
         assert.equal(await presetSelect.isVisible(),false,'Node presets are unavailable for selected text');
         assert.equal(await saveNodePreset.isVisible(),false);
         await inspector.getByRole('button',{name:'Blue',exact:true}).click();

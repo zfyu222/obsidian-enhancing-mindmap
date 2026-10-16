@@ -164,6 +164,16 @@ export default class MindMapPanel {
         this.color.setDisabled(disabled); this.fontSize.disabled = disabled; this.sizeApply.disabled = disabled;
         const styles = nodes.map(node => effectiveNodeStyle(node, presets));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;
+        const sizes = nodes.map((node, index) => {
+            const explicit = styles[index].fontSize;
+            if (typeof explicit === 'number') return explicit;
+            const computed = parseFloat(this.doc.defaultView?.getComputedStyle(node.contentEl).fontSize || '');
+            return Number.isFinite(computed) && computed > 0 ? computed : (this.map.setting.fontSize || 16);
+        });
+        const sizeMixed = sizes.some(size => Math.abs(size - sizes[0]) > 0.01);
+        const defaultSize = sizes.length && !sizeMixed ? Number(sizes[0].toFixed(2)).toString() : '';
+        this.fontSize.placeholder = sizeMixed ? t('Mixed font sizes') : defaultSize ? `${t('Default')} (${defaultSize})` : t('Default');
+        this.fontSize.title = sizeMixed ? t('Mixed font sizes') : defaultSize ? `${t('Current font size')}: ${defaultSize} px` : t('Font size');
         if (saved) {
             // Display inline span properties only; a node preset is never a text preset.
             const stack: string[] = [];
