@@ -97,6 +97,33 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             window.snapshot=()=>({selected:map.getSelectedNodes().map(n=>n.getId()),roots:map.getSelectedRoots().map(n=>n.getId()),children:map.root.children.map(n=>n.getId()),target:target.children.map(n=>n.getId()),scroll:[map.containerEL.scrollLeft,map.containerEL.scrollTop],undos:map.exec.history.undos.length});
         })();` });
         assert.deepEqual(errors, [], 'Harness initialization errors');
+        // Hover feedback is lighter than selection and never changes node geometry.
+        for (const theme of ['theme-light', 'theme-dark']) {
+            await page.evaluate(theme => {
+                document.body.className = theme;
+                document.body.style.setProperty('--interactive-accent', '#5294e2');
+            }, theme);
+            const branch = page.locator('[data-id="Branch A"]');
+            await page.mouse.move(20, 20);
+            const before = await branch.boundingBox();
+            await branch.hover();
+            const hover = await branch.locator('.mm-node-content').evaluate(el => ({
+                style: getComputedStyle(el).outlineStyle, color: getComputedStyle(el).outlineColor
+            }));
+            assert.equal(hover.style, 'solid');
+            assert.match(hover.color, /(?:0\.4|40%)/);
+            assert.deepEqual(await branch.boundingBox(), before);
+            assert.deepEqual((await page.evaluate(() => snapshot())).selected, ['Root']);
+            await page.mouse.move(20, 20);
+            assert.equal(await branch.locator('.mm-node-content').evaluate(el => getComputedStyle(el).outlineStyle), 'none');
+            await branch.click();
+            assert.equal(await branch.locator('.mm-node-content').evaluate(el => getComputedStyle(el).outlineColor), 'rgb(82, 148, 226)');
+            await page.evaluate(() => testMap.setSelectedNodes([testMap.root]));
+        }
+        await page.locator('[data-id="Branch A"]').hover();
+        await page.screenshot({ path: path.join(screenshotDir, 'node-hover.png') });
+        await page.evaluate(() => { document.body.className = ''; });
+        console.log('Node hover: light/dark theme, lighter outline, leave cleanup, selection priority and stable geometry passed.');
         await page.mouse.move(235, 115);
         await page.mouse.down();
         await page.mouse.move(650, 405, { steps: 12 });

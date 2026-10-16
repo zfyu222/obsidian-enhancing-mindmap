@@ -244,6 +244,15 @@
   background: rgba(82, 148, 226, 0.15);
 }
 
+/* Preview the node under the pointer without changing its size or selection. */
+@media (hover: hover) {
+  .mm-node:not(.mm-node-select):not(.mm-edit-node):hover > .mm-node-content {
+    outline: 2px solid rgba(82, 148, 226, 0.4);
+    outline-color: color-mix(in srgb, var(--interactive-accent, #5294e2) 40%, transparent);
+    outline-offset: 2px;
+  }
+}
+
 .mm-node.mm-node-select .mm-node-content {
   outline: 2px solid var(--interactive-accent, #5294e2);
   outline-offset: 2px;
