@@ -46,6 +46,16 @@ export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
 export function effectiveNodeStyle(node: any, presets: NodeStylePreset[]) {
     return {...findPreset(presets, node.data.stylePreset), ...normalizeNodeStyle(node.data.nodeStyle)};
 }
+/** Snapshot node-wide properties only; inline text markup and preset aliases are excluded. */
+export function snapshotNodeStyle(node: any, presets: NodeStylePreset[]) {
+    const style = effectiveNodeStyle(node, presets);
+    return {
+        color: /^#[0-9a-f]{6}$/i.test(style.color || '') ? style.color : undefined,
+        fontSize: typeof style.fontSize === 'number' ? style.fontSize : undefined,
+        bold: style.bold === true, italic: style.italic === true,
+        underline: style.underline === true, strike: style.strike === true
+    };
+}
 export function styleMarker(name?: string, overrides?: LocalNodeStyle): string {
     const local = normalizeNodeStyle(overrides);
     const meta = {...(validPresetName(name) ? {name} : {}), ...(local ? {overrides: local} : {})};

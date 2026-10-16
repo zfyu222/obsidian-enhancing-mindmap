@@ -150,3 +150,13 @@ test('invalid local style attributes cannot inject CSS through metadata',()=>{
     assert.equal(styles.readStyleMarker(original).text,original);
     const text=styles.styleMarker(undefined,{bold:false,color:'#123456'});assert.equal(styles.readStyleMarker(text).overrides.bold,false);
 });
+
+test('saving a node style snapshots effective values but excludes names, aliases and inline text formatting',()=>{
+    const map=mapFixture(),a=node('**Inline bold text**',map.root);
+    map.setting.nodeStylePresets[0].aliases=['Old name'];
+    a.data.nodeStyle={color:'#43a047',fontSize:22,italic:false,underline:true};
+    const snapshot=styles.snapshotNodeStyle(a,map.setting.nodeStylePresets);
+    assert.equal(snapshot.color,'#43a047');assert.equal(snapshot.fontSize,22);assert.equal(snapshot.italic,false);assert.equal(snapshot.underline,true);
+    assert.equal(snapshot.bold,false);assert.equal(snapshot.name,undefined);assert.equal(snapshot.aliases,undefined);
+    snapshot.color='#123456';assert.equal(a.data.nodeStyle.color,'#43a047');assert.equal(map.setting.nodeStylePresets[0].color,'#e53935');
+});

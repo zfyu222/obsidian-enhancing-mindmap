@@ -374,3 +374,8 @@
 .mm-panel-format-buttons button[data-format=strike] { text-decoration: line-through; }
 .mm-panel-presets { border-top: 1px solid var(--background-modifier-border); padding-top: 14px; margin-top: 14px; }
 .mm-panel-presets[hidden] { display: none; }
+
+.mm-panel-save-preset { padding: 10px; margin-bottom: 12px; border: 1px solid var(--background-modifier-border); border-radius: 6px; }
+.mm-panel-save-preset[hidden] { display: none; }
+.mm-panel-save-preset label { display: block; margin-bottom: 10px; }
+.mm-panel-save-preset input { width: 100%; margin-top: 6px; }

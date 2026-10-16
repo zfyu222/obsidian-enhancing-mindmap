@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['normalizeNodeStyle', 'effectiveNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+const names = ['normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -612,11 +612,38 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await inspector.getByLabel('Font size',{exact:true}).fill('22');
         await inspector.getByRole('button',{name:'Apply font size',exact:true}).click();
         assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontSize),'22px');
+        // Save the effective node style, including overrides, as a reusable named preset.
+        await page.evaluate(()=>{testMap.view.plugin=stylePlugin;testMap.emit('toolbarChange');});
+        const saveNodePreset=inspector.getByRole('button',{name:'Save node style as preset',exact:true});
+        await saveNodePreset.click();
+        const presetForm=inspector.locator('.mm-panel-save-preset');
+        await presetForm.getByLabel('New preset name',{exact:true}).fill('New style 1');
+        await presetForm.getByRole('button',{name:'Save preset',exact:true}).click();
+        assert.ok((await presetForm.locator('[role=alert]').textContent()).length,'Duplicate names cannot replace existing presets');
+        await presetForm.getByLabel('New preset name',{exact:true}).fill('Saved node style');
+        await page.screenshot({path:path.join(screenshotDir,'save-node-style-preset.png')});
+        await presetForm.getByRole('button',{name:'Save preset',exact:true}).click();
+        await page.waitForFunction(()=>testMap.root.data.stylePreset==='Saved node style');
+        assert.equal(await presetForm.isVisible(),false);
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets.find(p=>p.name==='Saved node style').color),'#e53935');
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets.find(p=>p.name==='Saved node style').fontSize),22);
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets.find(p=>p.name==='Saved node style').bold),true);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.fontSize),22);
+        assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
+        await saveNodePreset.click();
+        await presetForm.getByRole('button',{name:'Cancel saving preset',exact:true}).click();
+        assert.equal(await presetForm.isVisible(),false);
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.root,testMap.summaries.items[0].root]));
+        assert.equal(await saveNodePreset.isDisabled(),true);
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.root]));
         await inspector.getByRole('button',{name:'Clear local node style',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
         assert.equal(await presetSelect.isVisible(),false,'Node presets are unavailable for selected text');
+        assert.equal(await saveNodePreset.isVisible(),false);
         await inspector.getByRole('button',{name:'Blue',exact:true}).click();
         await page.waitForFunction(()=>testMap.root.data.isEdit && testMap.root.data.text.includes('color:#1e88e5'));
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);

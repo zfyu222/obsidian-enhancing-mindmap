@@ -1,6 +1,10 @@
 // English
 
 export default {
+    "Save node style as preset": "Save node style as preset",
+    "New preset name": "New preset name",
+    "Cancel saving preset": "Cancel saving preset",
+    "Select one node to save preset": "Select one node to save preset",
     "Default": "Default",
     "Apply font size": "Apply font size",
     "Clear local node style": "Clear local node style",

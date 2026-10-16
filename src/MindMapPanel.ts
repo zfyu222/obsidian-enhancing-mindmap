@@ -1,5 +1,5 @@
 import MindMap from './mindmap/mindmap';
-import { findPreset, effectiveNodeStyle } from './nodeStyles';
+import { findPreset, effectiveNodeStyle, validPresetName, snapshotNodeStyle } from './nodeStyles';
 import { renderPresetColorPicker } from './StylePresetSettings';
 import { editorSelection, applyEditorStyle } from './mindmap/text-format';
 import { t } from './lang/helpers';
@@ -18,6 +18,13 @@ export default class MindMapPanel {
     private buttons: Record<string,HTMLButtonElement> = {};
     private textSelection?: {node: any; text: string; start: number; end: number};
     private pending = false;
+    private savePreset: HTMLButtonElement;
+    private presetForm: HTMLFormElement;
+    private presetName: HTMLInputElement;
+    private presetError: HTMLElement;
+    private presetSubmit: HTMLButtonElement;
+    private presetSource?: {node: any; style: ReturnType<typeof snapshotNodeStyle>};
+    private savingPreset = false;
     private doc: Document;
     constructor(private map: MindMap, host: HTMLElement, manage: () => void) {
         this.doc = host.ownerDocument;
@@ -54,6 +61,26 @@ export default class MindMapPanel {
             if (this.textSelection || this.select.value === '__mixed__') return;
             map.applyStylePreset(this.select.value || undefined); map.focusAfterHistory();
         });
+        this.savePreset = document.createElement('button'); this.savePreset.type = 'button'; this.savePreset.textContent = t('Save node style as preset');
+        this.savePreset.addEventListener('mousedown', event => event.preventDefault());
+        this.savePreset.addEventListener('click', () => {
+            const nodes = map.getSelectedNodes();
+            if (this.textSelection || nodes.length !== 1 || map.isComposing) return;
+            map.finishEditingForHistory();
+            this.presetSource = {node: nodes[0], style: snapshotNodeStyle(nodes[0], map.setting.nodeStylePresets || [])};
+            this.presetForm.hidden = false; this.presetError.textContent = ''; this.presetName.value = ''; this.presetName.focus();
+        });
+        this.presetSection.appendChild(this.savePreset);
+        this.presetForm = document.createElement('form'); this.presetForm.className = 'mm-panel-save-preset'; this.presetForm.hidden = true;
+        const nameLabel = document.createElement('label'); nameLabel.textContent = t('Preset name'); this.presetForm.appendChild(nameLabel);
+        this.presetName = document.createElement('input'); this.presetName.type = 'text'; this.presetName.maxLength = 80;
+        this.presetName.setAttribute('aria-label', t('New preset name')); nameLabel.appendChild(this.presetName);
+        this.presetError = document.createElement('p'); this.presetError.className = 'mm-preset-error'; this.presetError.setAttribute('role','alert'); this.presetForm.appendChild(this.presetError);
+        this.presetSubmit = document.createElement('button'); this.presetSubmit.type = 'submit'; this.presetSubmit.textContent = t('Save preset'); this.presetForm.appendChild(this.presetSubmit);
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = t('Cancel saving preset');
+        cancel.addEventListener('click', () => { this.presetForm.hidden = true; this.presetSource = undefined; map.focusAfterHistory(); }); this.presetForm.appendChild(cancel);
+        this.presetForm.addEventListener('submit', event => { event.preventDefault(); void this.createPreset(); });
+        this.presetSection.appendChild(this.presetForm);
         const settings = document.createElement('button'); settings.type = 'button'; settings.textContent = t('Manage style presets');
         settings.addEventListener('click', manage); this.presetSection.appendChild(settings);
         // Capture the range before a number input or native color picker takes focus.
@@ -61,6 +88,29 @@ export default class MindMapPanel {
         this.doc.addEventListener('selectionchange', this.selectionChange);
         map.on('toolbarChange', this.update); map.on('mindMapChange', this.update); map.appEl.addEventListener('input', this.selectionChange);
         this.update();
+    }
+    private async createPreset() {
+        const source = this.presetSource, plugin = this.map.view?.plugin;
+        if (!source || !plugin || this.savingPreset || this.map.isComposing) return;
+        const name = this.presetName.value.trim();
+        const presets = plugin.settings.nodeStylePresets || [];
+        if (!validPresetName(name) || findPreset(presets, name)) { this.presetError.textContent = t('Invalid preset name'); return; }
+        if (this.map.getNodeById(source.node.getId()) !== source.node) { this.presetForm.hidden = true; this.presetSource = undefined; return; }
+        this.savingPreset = true; this.presetSubmit.disabled = true;
+        plugin.settings.nodeStylePresets = [...presets, {name, ...source.style}];
+        try {
+            await plugin.saveSettings();
+            // Bind the original node only if it is still the sole selected node.
+            const selected = this.map.getSelectedNodes();
+            if (this.map.getNodeById(source.node.getId()) === source.node && selected.length === 1 && selected[0] === source.node && !this.textSelection) {
+                this.map.setting.nodeStylePresets = plugin.settings.nodeStylePresets;
+                this.map.applyStylePreset(name); this.map.focusAfterHistory();
+            }
+            this.presetForm.hidden = true; this.presetSource = undefined;
+        } catch (_) {
+            plugin.settings.nodeStylePresets = presets;
+            this.presetError.textContent = t('Unable to save presets');
+        } finally { this.savingPreset = false; this.presetSubmit.disabled = false; this.update(); }
     }
     private captureRange = () => {
         const node = this.map.editNode || this.map.selectNode;
@@ -106,6 +156,11 @@ export default class MindMapPanel {
         this.heading.textContent = t(textMode ? 'Selected text style' : 'Node style');
         this.status.textContent = textMode ? t('Only selected text is affected') : nodes.length ? t('Selected nodes') + ': ' + nodes.length : t('Select a node to style');
         this.presetSection.hidden = textMode; this.select.disabled = textMode || !nodes.length; this.reset.hidden = textMode; this.reset.disabled = disabled;
+        this.savePreset.disabled = disabled || textMode || nodes.length !== 1 || !this.map.view?.plugin || this.savingPreset;
+        this.savePreset.title = nodes.length !== 1 ? t('Select one node to save preset') : t('Save node style as preset');
+        if (this.presetSource && (textMode || nodes.length !== 1 || nodes[0] !== this.presetSource.node)) {
+            this.presetForm.hidden = true; this.presetSource = undefined;
+        }
         this.color.setDisabled(disabled); this.fontSize.disabled = disabled; this.sizeApply.disabled = disabled;
         const styles = nodes.map(node => effectiveNodeStyle(node, presets));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;

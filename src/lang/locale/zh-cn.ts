@@ -1,6 +1,10 @@
 // 简体中文
 
 export default {
+    "Save node style as preset": "保存节点样式为预设",
+    "New preset name": "新预设名称",
+    "Cancel saving preset": "取消",
+    "Select one node to save preset": "请选择一个节点以保存样式预设",
     "Default": "默认",
     "Apply font size": "应用字号",
     "Clear local node style": "清除节点局部样式",
