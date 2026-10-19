@@ -27,11 +27,20 @@ export default class MindMapPanel {
     private presetSource?: {node: any; style: ReturnType<typeof snapshotNodeStyle>};
     private savingPreset = false;
     private doc: Document;
-    constructor(private map: MindMap, host: HTMLElement, manage: () => void) {
+    constructor(private map: MindMap, host: HTMLElement, manage: () => void, private mobile = false) {
         this.doc = host.ownerDocument;
         this.element = document.createElement('aside'); this.element.className = 'mm-side-panel';
         this.element.setAttribute('aria-label', t('Mind map panel')); host.appendChild(this.element);
         const title = document.createElement('h3'); title.textContent = t('Mind map panel'); this.element.appendChild(title);
+        if (mobile) {
+            this.element.classList.add('mm-mobile-panel'); this.element.hidden = true;
+            const close = document.createElement('button'); close.type = 'button';
+            close.className = 'mm-panel-close'; close.textContent = '×';
+            close.setAttribute('aria-label', t('Close mind map panel'));
+            close.addEventListener('click', () => { this.hide(); map.focusAfterHistory(); });
+            this.element.insertBefore(close, title);
+            map.appEl.addEventListener('click', this.canvasClick);
+        }
         const section = document.createElement('section'); this.element.appendChild(section);
         this.heading = document.createElement('h4'); section.appendChild(this.heading);
         this.status = document.createElement('p'); this.status.className = 'mm-panel-status'; section.appendChild(this.status);
@@ -89,6 +98,16 @@ export default class MindMapPanel {
         map.on('toolbarChange', this.update); map.on('mindMapChange', this.update); map.appEl.addEventListener('input', this.selectionChange);
         this.update();
     }
+    private hide() { this.element.hidden = true; this.cancelFontSize(); }
+    private canvasClick = (event: MouseEvent) => {
+        if (Date.now() < this.map._suppressClickUntil || this.map.editNode?.data.isEdit) return;
+        const target = event.target as HTMLElement;
+        const element = target.closest?.('.mm-node');
+        const node = element && this.map.getNodeById(element.getAttribute('data-id'));
+        if (node && this.map.getSelectedNodes().includes(node) && !target.closest('a, .mm-node-menu, .mm-node-bar')) {
+            this.element.hidden = false; this.update();
+        } else if (!element) this.hide();
+    };
     private cancelFontSize() {
         clearTimeout(this.sizeTimer); this.sizeTimer = undefined; this.sizeDraft = undefined;
     }
@@ -172,6 +191,7 @@ export default class MindMapPanel {
     update = () => {
         if (this.pending) return;
         const nodes = this.map.root ? this.map.getSelectedNodes() : [];
+        if (this.mobile && !nodes.length) this.hide();
         const presets = this.map.setting.nodeStylePresets || [];
         if (this.textSelection && (!this.textSelection.node.data.isEdit || this.map.getNodeById(this.textSelection.node.getId()) !== this.textSelection.node)) this.textSelection = undefined;
         if (this.sizeDraft && !this.sameSizeContext(this.sizeDraft)) this.cancelFontSize();
@@ -240,6 +260,7 @@ export default class MindMapPanel {
     toggle() { this.element.hidden = !this.element.hidden; if (this.element.hidden) this.cancelFontSize(); }
     destroy() {
         this.cancelFontSize();
+        this.map.appEl.removeEventListener('click', this.canvasClick);
         this.doc.removeEventListener('selectionchange', this.selectionChange);
         this.map.off('toolbarChange',this.update); this.map.off('mindMapChange',this.update); this.map.appEl.removeEventListener('input',this.selectionChange); this.element.remove();
     }

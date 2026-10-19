@@ -724,6 +724,24 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.waitForTimeout(550);
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle?.fontSize),beforeDestroySize);
         assert.equal(await page.locator('.mm-side-panel').count(),0);
+        await page.setViewportSize({width:390,height:844});
+        await page.evaluate(()=>{
+            window.mobilePanel = new MindMapPanel(testMap, document.querySelector('#viewport'), ()=>{}, true);
+            testMap.setSelectedNodes([testMap.root]);
+        });
+        assert.equal(await inspector.isVisible(),false);
+        await page.evaluate(()=>testMap.root.contentEl.click());
+        assert.equal(await inspector.isVisible(),true);
+        assert.equal(await inspector.evaluate(el=>getComputedStyle(el).position),'absolute');
+        await page.getByRole('button',{name:'Close mind map panel',exact:true}).click();
+        assert.equal(await inspector.isVisible(),false);
+        await page.evaluate(()=>testMap.root.contentEl.click());
+        assert.equal(await inspector.isVisible(),true);
+        await page.evaluate(()=>testMap.appEl.click());
+        assert.equal(await inspector.isVisible(),false);
+        await page.evaluate(()=>mobilePanel.destroy());
+        await page.setViewportSize({width:1200,height:900});
+
         await page.evaluate(()=>{
             const branch=testMap.root.children[0];
             branch.setText('Ordinary styled branch');

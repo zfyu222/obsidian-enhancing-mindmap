@@ -1,6 +1,7 @@
 // 简体中文
 
 export default {
+    "Close mind map panel": "关闭思维导图面板",
     "Global default font size": "全局默认字号",
     "Mixed font sizes": "不同字号",
     "Current font size": "当前字号",

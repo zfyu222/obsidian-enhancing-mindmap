@@ -1,6 +1,7 @@
 // English
 
 export default {
+    "Close mind map panel": "Close mind map panel",
     "Global default font size": "Global default font size",
     "Mixed font sizes": "Mixed font sizes",
     "Current font size": "Current font size",

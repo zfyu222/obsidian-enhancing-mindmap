@@ -402,7 +402,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.panel = new MindMapPanel(this.mindmap, body, () => {
       const settings = (this.app as any).setting;
       settings.open(); settings.openTabById(this.plugin.manifest.id);
-    });
+    }, Platform.isMobile);
     this.mindmap.colors = this.colors;
     if (this.firstInit) {
 
