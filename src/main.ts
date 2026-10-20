@@ -1,4 +1,5 @@
 import { normalizePresets, normalizeNodeStyle } from './nodeStyles';
+import { isSearchResultState } from './search/navigation';
 import {
   Plugin,
   WorkspaceLeaf,
@@ -1340,7 +1341,7 @@ export default class MindMapPlugin extends Plugin {
               state.type === "markdown" &&
               state.state?.file &&
               // And the current mode of the file is not set to markdown
-              self.mindmapFileModes[this.id || state.state.file] !== "markdown"
+              (isSearchResultState(rest[0]) || self.mindmapFileModes[this.id || state.state.file] !== "markdown")
             ) {
               // Then check for the kanban frontMatterKey
               const cache = self.app.metadataCache.getCache(state.state.file);

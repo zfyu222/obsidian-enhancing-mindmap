@@ -125,7 +125,7 @@ export function sourceNodeContent(node: any, prepared: ReturnType<typeof prepare
             const title = fold ? header[2].slice(0, fold.index) : header[2];
             const body = prepared.lines.slice(start + 1, end).join('\n').trimEnd();
             node.c = children;
-            return { text: (title + (body ? '\n' + body : '')).trim(), stableId, foldedId: fold?.[1] || '' };
+            return { text: (title + (body ? '\n' + body : '')).trim(), stableId, foldedId: fold?.[1] || '', startLine:start, endLine:end };
         }
     }
     if (node.t !== 'list_item' || start === undefined) return { text: node.v, stableId, foldedId: '' };
@@ -149,5 +149,5 @@ export function sourceNodeContent(node: any, prepared: ReturnType<typeof prepare
     const indent = match[1] + '  ';
     prepared.lines.slice(start + 1, end).forEach(line => parts.push(line.startsWith(indent) ? line.slice(indent.length) : line.trim() ? line : ''));
     node.c = children;
-    return { text: parts.join('\n').trim(), stableId, foldedId: fold?.[1] || '' };
+    return { text: parts.join('\n').trim(), stableId, foldedId: fold?.[1] || '', startLine:start, endLine:end };
 }

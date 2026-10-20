@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -85,7 +85,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{RelationManager,extractRelations,relationsMarkdown,relationCurve,Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
+            Object.assign(window,{SearchNavigation,centerSearchNode,RelationManager,extractRelations,relationsMarkdown,relationCurve,Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -911,6 +911,44 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.locator('.mm-relation').count(),0);
         await page.keyboard.press('Control+z');assert.equal(await page.locator('.mm-relation').count(),1);
         console.log('Relation lines: actual toolbar, sequential node clicks, arrow, movement, folding, native hit selection, deletion, undo/redo, cancellation and saved metadata reload passed.');
+
+        // Core Search's real eState.match shape drives the compiled navigation code.
+        const searchSource='# Search map\n- Parent ^folded\n  - Same keyword\n    continuation needle\n- Same keyword';
+        const searchParser=require('./search-test-helpers.cjs').parsingView();
+        const searchParsed=searchParser.mdToData(searchSource,true);
+        await page.evaluate(({raw,parsed})=>{
+            const viewport=document.createElement('div');viewport.id='search-viewport';viewport.style.cssText='position:fixed;left:30px;top:80px;width:1000px;height:650px;overflow:auto;background:#252a33;z-index:3000';document.body.appendChild(viewport);
+            const canvas=document.createElement('div');canvas.style.cssText='position:relative;width:6000px;height:6000px;transform:scale(1.5);transform-origin:1800px 1500px';viewport.appendChild(canvas);
+            const map=Object.create(MindMap.prototype);Object.assign(map,{appEl:canvas,contentEL:canvas,containerEL:viewport,selectedNodes:[],setting:{headLevel:1},mindScale:150,isComposing:false,_menuDom:{style:{}},exec:{history:{undos:[],redos:[]}},emit(){}});
+            let count=0;
+            const make=(data,parent)=>{
+                const el=document.createElement('div');el.className='mm-node';el.tabIndex=-1;el.dataset.id=data.id;el.textContent=data.text;
+                el.style.cssText='position:absolute;padding:12px 20px;background:#465777;border-radius:8px;white-space:pre;left:'+(1500+count*160)+'px;top:'+(1100+count++*100)+'px';canvas.appendChild(el);
+                const n={data:{...data},parent,containEl:el,children:[],isExpand:data.expanded!==false,getId(){return this.data.id},expand(){this.isExpand=true},select(){el.focus({preventScroll:true})},unSelect(){el.classList.remove('mm-node-select')}};n.children=data.children.map(d=>make(d,n));return n;
+            };
+            map.root=make(parsed);
+            map.refresh=()=>{const visit=(node,visible)=>{node.containEl.style.display=visible?'block':'none';node.children.forEach(child=>visit(child,visible&&node.isExpand));};visit(map.root,true);};map.refresh();
+            window.searchView={data:raw,file:{path:'search.md'},searchReady:false,mindmap:map,getMdText:text=>text.trim(),mdToData:()=>JSON.parse(JSON.stringify(parsed))};
+            window.searchNav=new SearchNavigation(searchView);window.searchMap=map;
+            const start=raw.indexOf('continuation needle');searchNav.receive({match:{content:raw,matches:[[start,start+19]]}});
+        },{raw:searchSource,parsed:searchParsed});
+        assert.equal(await page.evaluate(()=>searchMap.selectedNodes.length),0);
+        await page.evaluate(()=>{searchView.searchReady=true;searchNav.flush();});
+        await page.waitForTimeout(160);
+        assert.equal(await page.evaluate(()=>searchMap.selectNode===searchMap.root.children[0].children[0]),true);
+        assert.equal(await page.evaluate(()=>searchMap.root.children[0].isExpand),true);
+        const centerDelta=await page.evaluate(()=>{const v=searchMap.containerEL,b=v.getBoundingClientRect(),n=searchMap.selectNode.containEl.getBoundingClientRect();return{x:n.left+n.width/2-b.left-v.clientWidth/2,y:n.top+n.height/2-b.top-v.clientHeight/2};});
+        assert.ok(Math.abs(centerDelta.x)<2&&Math.abs(centerDelta.y)<2,JSON.stringify(centerDelta));
+        assert.equal(await page.evaluate(()=>searchMap.mindScale),150);
+        await page.screenshot({path:path.join(screenshotDir,'search-result-centered-node.png')});
+        await page.evaluate(()=>{const raw=searchView.data,start=raw.lastIndexOf('Same keyword');searchNav.receive({match:{content:raw,matches:[[start,start+12]]}});});
+        assert.equal(await page.evaluate(()=>searchMap.selectNode===searchMap.root.children[1]),true);
+        const panned=await page.evaluate(()=>{searchMap.appEl.dispatchEvent(new Event('pointerdown',{bubbles:true}));searchMap.containerEL.scrollLeft+=75;return searchMap.containerEL.scrollLeft;});
+        await page.waitForTimeout(450);
+        assert.equal(await page.evaluate(()=>searchMap.containerEL.scrollLeft),panned);
+        assert.equal(await page.evaluate(()=>searchMap.exec.history.undos.length),0);
+        await page.evaluate(()=>{searchNav.clear();document.querySelector('#search-viewport').remove();});
+        console.log('Search navigation: real search payload, render queue, duplicate nodes, folded ancestors, selection, exact visual center at 150% zoom, latest result and manual pan cancellation passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

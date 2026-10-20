@@ -1,4 +1,5 @@
 import MindMapPanel from './MindMapPanel';
+import { SearchNavigation } from './search/navigation';
 import { extractRelations } from './relations/model';
 import {
   HoverParent,
@@ -49,6 +50,10 @@ export class MindMapView extends TextFileView implements HoverParent {
   fileCache: any;
   firstInit: boolean = true;
   yamlString:string=''
+  searchNavigation: SearchNavigation;
+  searchReady = false;
+  private renderGeneration = 0;
+  private initTimer?: ReturnType<typeof setTimeout>;
 
   getViewType() {
     return mindmapViewType;
@@ -327,6 +332,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   constructor(leaf: WorkspaceLeaf, plugin: MindMapPlugin) {
     super(leaf);
     this.plugin = plugin;
+    this.searchNavigation = new SearchNavigation(this);
     this.setColors();
 
     this.fileCache = {
@@ -339,6 +345,7 @@ export class MindMapView extends TextFileView implements HoverParent {
 
 
   async onClose() {
+    this.searchReady=false;this.renderGeneration++;clearTimeout(this.initTimer);this.searchNavigation.clear();
     this.panel?.destroy();
     this.panel = null;
     this.toolbar?.destroy();
@@ -363,6 +370,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   }
 
   setViewData(data: string) {
+    const generation=++this.renderGeneration;this.searchReady=false;clearTimeout(this.initTimer);this.searchNavigation.beginRender();
     this.panel?.destroy();
     this.panel = null;
     this.toolbar?.destroy();
@@ -408,7 +416,8 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.mindmap.colors = this.colors;
     if (this.firstInit) {
 
-      setTimeout(() => {
+      this.initTimer = setTimeout(() => {
+        if(generation!==this.renderGeneration)return;
         var leaf = this.leaf;
         if (leaf) {
           var view = leaf.view as MindMapView;
@@ -427,6 +436,7 @@ export class MindMapView extends TextFileView implements HoverParent {
         this.toolbar?.update();
         this.panel?.update();
         this.firstInit = false;
+        this.searchReady=true;this.searchNavigation.flush();
       }, 100);
     } else {
       var view = this.leaf.view as MindMapView;
@@ -441,10 +451,17 @@ export class MindMapView extends TextFileView implements HoverParent {
       this.mindmap.view = this;
       this.toolbar?.update();
       this.panel?.update();
+      this.searchReady=true;this.searchNavigation.flush();
     }
   }
 
+  setEphemeralState(state: any) {
+    super.setEphemeralState(state);
+    this.searchNavigation.receive(state);
+  }
+
   onunload() {
+    this.searchReady=false;this.renderGeneration++;clearTimeout(this.initTimer);this.searchNavigation.clear();
     this.panel?.destroy();
     this.panel = null;
     this.toolbar?.destroy();
@@ -513,7 +530,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     return md.trim();
   }
 
-  mdToData(str: string) {
+  mdToData(str: string, includeSource = false) {
     const prepared = prepareMainMarkdown(str);
     function transformData(mapData: any) {
       var flag = true;
@@ -535,6 +552,7 @@ export class MindMapView extends TextFileView implements HoverParent {
      // console.log(id);
 
       var map: INodeData = {
+        ...(includeSource ? {sourceStartLine: mapData.t === 'root' ? -1 : (mapData.p?.lines?.[0] ?? -1), sourceEndLine: (source as any).endLine ?? mapData.p?.lines?.[1] ?? -1} : {}),
         id: marker.id || id || uuid(),
         summaryMember: !!marker.id,
         stylePreset: prepared.styles.get(mapData.p?.lines?.[0])?.name,
