@@ -118,7 +118,7 @@ export default class Node {
 
     parseText(){
         MarkdownRenderer.renderMarkdown( this.data.text ,this.contentEl,this.mindmap.path||"",null).then(()=>{
-            if (this.data.stylePreset || this.data.nodeStyle) applyNodeStyle(this, this.mindmap?.setting?.nodeStylePresets || []);
+            if (this.data.stylePreset || this.data.nodeStyle || Object.keys(this.mindmap?.setting?.defaultNodeStyle || {}).length) applyNodeStyle(this, this.mindmap?.setting?.nodeStylePresets || [], this.mindmap?.setting?.defaultNodeStyle);
             this.data.mdText = this.contentEl.innerHTML;
             this.refreshBox();
             this.mindmap&&this.mindmap.emit('initNode',{});

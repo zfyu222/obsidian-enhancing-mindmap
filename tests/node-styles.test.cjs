@@ -195,3 +195,48 @@ test('box validation rejects unsafe CSS and unsupported geometry while old nodes
     delete n.data.nodeStyle;styles.applyNodeStyle(n,[]);
     assert.equal(n.containEl.classList.contains('mm-box-border'),false);
 });
+
+
+test('default box style falls back per property, preserves explicit resets, and never serializes inherited values',()=>{
+    const map=mapFixture(),a=node('Default node',map.root);delete a.data.stylePreset;
+    const defaults={shape:'rounded',borderWidth:2,borderColor:'#123456',backgroundColor:'#eeeeee'};
+    map.setting.defaultNodeStyle=defaults;map.refreshNodeStyles();
+    assert.equal(a.containEl.classList.contains('mm-box-border'),true);
+    assert.equal(a.containEl.style.getPropertyValue('--mm-preset-background'),'#eeeeee');
+    assert.equal(a.data.nodeStyle,undefined);assert.equal(a.data.stylePreset,undefined);
+    assert.equal(map.getMarkdown().includes('backgroundColor'),false);
+    const preset={name:'partial',color:'#222222',shape:undefined,backgroundColor:'#aabbcc'};
+    let value=styles.effectiveNodeStyle(a,[preset],defaults);assert.equal(value.shape,'rounded');
+    a.data.stylePreset='partial';value=styles.effectiveNodeStyle(a,[preset],defaults);
+    assert.equal(value.shape,'rounded');assert.equal(value.backgroundColor,'#aabbcc');
+    a.data.nodeStyle={shape:'none',backgroundColor:''};value=styles.effectiveNodeStyle(a,[preset],defaults);
+    assert.equal(value.shape,'none');assert.equal(value.backgroundColor,'');
+    const snapshot=styles.snapshotNodeStyle(a,[preset],defaults);
+    assert.equal(snapshot.borderColor,'#123456');assert.equal(snapshot.backgroundColor,'');
+    delete a.data.stylePreset;delete a.data.nodeStyle;map.selectedNodes=[a];
+    map.applyLocalNodeStyle({backgroundColor:'#ffffff'});map.exec.history.undo();
+    assert.equal(a.data.nodeStyle,undefined);assert.equal(a.containEl.style.getPropertyValue('--mm-preset-background'),'#eeeeee');
+    map.setting.defaultNodeStyle={};map.refreshNodeStyles();assert.equal(a.containEl.classList.contains('mm-box-fill'),false);
+});
+
+test('newly rendered plain nodes receive defaults without acquiring node metadata',async()=>{
+    const ActualNode=load('src/mindmap/INode.ts',{obsidian:{MarkdownRenderer:{renderMarkdown:async(text,el)=>{el.innerHTML=text;}}}}).default;
+    const n=node('Fresh');delete n.data.stylePreset;n.contentEl={innerHTML:''};n._delay=()=>{};
+    n.mindmap={path:'',setting:{defaultNodeStyle:{backgroundColor:'#aabbcc',shape:'pill'}},emit(){}};
+    ActualNode.prototype.parseText.call(n);await Promise.resolve();
+    assert.equal(n.containEl.classList.contains('mm-box-border'),true);
+    assert.equal(n.containEl.style.getPropertyValue('--mm-preset-background'),'#aabbcc');
+    assert.equal(n.data.nodeStyle,undefined);
+});
+
+test('default settings load safely and refresh multiple maps without changing history or note content',async()=>{
+    const plugin={loadData:async()=>({defaultNodeStyle:{backgroundColor:'#123456',shape:'rounded',borderWidth:999}})};
+    await Plugin.prototype.loadSettings.call(plugin);
+    assert.equal(plugin.settings.defaultNodeStyle.backgroundColor,'#123456');assert.equal(plugin.settings.defaultNodeStyle.borderWidth,undefined);
+    const maps=[mapFixture(),mapFixture()];const before=maps.map(map=>map.getMarkdown());
+    plugin.saveData=async()=>{};plugin.app={workspace:{getLeavesOfType:()=>maps.map(map=>({view:{mindmap:map}}))}};
+    await Plugin.prototype.saveSettings.call(plugin);
+    maps.forEach((map,i)=>{assert.equal(map.root.containEl.style.getPropertyValue('--mm-preset-background'),'#123456');assert.equal(map.getMarkdown(),before[i]);assert.equal(map.exec.history.undos.length,0);});
+    const legacy={loadData:async()=>({fontSize:18})};await Plugin.prototype.loadSettings.call(legacy);
+    assert.equal(Object.keys(legacy.settings.defaultNodeStyle).length,0);
+});

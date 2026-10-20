@@ -1,4 +1,4 @@
-import { NodeStylePreset, styleMarker, applyNodeStyle, findPreset } from '../nodeStyles';
+import { NodeStylePreset, LocalNodeStyle, styleMarker, applyNodeStyle, findPreset } from '../nodeStyles';
 import StyleNodes, { ChangeNodeStyle } from './StyleNodes';
 import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
@@ -22,6 +22,7 @@ let addIcon = '<svg class="icon" width="16px" height="16.00px" viewBox="0 0 1024
 let tempDispLevel = 0;
 
 interface Setting {
+    defaultNodeStyle?: LocalNodeStyle;
     nodeStylePresets?: NodeStylePreset[];
     theme?: string;
     canvasSize?: number;
@@ -2189,7 +2190,7 @@ export default class MindMap {
     }
     refreshNodeStyles() {
         if (!this.root) return;
-        this.traverseAll((node: INode) => applyNodeStyle(node, this.setting.nodeStylePresets || []));
+        this.traverseAll((node: INode) => applyNodeStyle(node, this.setting.nodeStylePresets || [], this.setting.defaultNodeStyle));
         this.refresh();
         this.emit('toolbarChange');
     }

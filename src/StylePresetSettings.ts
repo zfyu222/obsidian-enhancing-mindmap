@@ -1,4 +1,4 @@
-import { NodeStylePreset, normalizePresets, renamePreset, applyNodeStyle } from './nodeStyles';
+import { NodeStylePreset, normalizeNodeBoxStyle, normalizePresets, renamePreset, applyNodeStyle } from './nodeStyles';
 import { t } from './lang/helpers';
 
 /** Preset swatches and the platform color palette share one optional color value. */
@@ -63,6 +63,31 @@ export function renderNodeBoxControls(host: HTMLElement, onChange: (patch: any) 
     }};
 }
 
+/** Defaults stay in plugin settings; notes contain only explicit overrides. */
+export function renderDefaultNodeStyleSettings(host: HTMLElement, plugin: any) {
+    const section = document.createElement('details'); section.className = 'mm-default-style'; host.appendChild(section);
+    const title = document.createElement('summary'); title.textContent = t('Default node style'); section.appendChild(title);
+    const description = document.createElement('p'); description.textContent = t('Default node style description'); section.appendChild(description);
+    let draft = {...normalizeNodeBoxStyle(plugin.settings.defaultNodeStyle)};
+    const box = renderNodeBoxControls(section, patch => { draft = {...draft, ...patch}; box.setValue(draft); update(); save.textContent = t('Save default node style'); });
+    box.element.open = true; box.setValue(draft);
+    const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview';
+    const content = document.createElement('div'); content.className = 'mm-node-content'; content.textContent = t('Preset preview'); preview.appendChild(content); section.appendChild(preview);
+    const update = () => applyNodeStyle({containEl:preview,data:{},refreshBox(){}}, [], draft); update();
+    const error = document.createElement('p'); error.className = 'mm-preset-error'; error.setAttribute('role','alert'); section.appendChild(error);
+    const save = document.createElement('button'); save.type = 'button'; save.textContent = t('Save default node style'); section.appendChild(save);
+    const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = t('Restore original node style'); section.appendChild(reset);
+    const commit = async (value: any) => {
+        const before = plugin.settings.defaultNodeStyle; save.disabled = true; reset.disabled = true; box.setValue(draft,true);
+        plugin.settings.defaultNodeStyle = normalizeNodeBoxStyle(value);
+        try { await plugin.saveSettings(); draft = {...plugin.settings.defaultNodeStyle}; error.textContent = ''; save.textContent = t('Preset saved'); }
+        catch (_) { plugin.settings.defaultNodeStyle = before; error.textContent = t('Unable to save presets'); }
+        finally { save.disabled = false; reset.disabled = false; box.setValue(draft); update(); }
+    };
+    save.addEventListener('click', () => void commit(draft));
+    reset.addEventListener('click', () => void commit({}));
+}
+
 /** Native controls keep this editor usable in both desktop and mobile settings. */
 export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
     const section = document.createElement('details'); section.className = 'mm-preset-settings'; host.appendChild(section);
@@ -109,7 +134,7 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
                 fontSize: size.value ? Number(size.value) : undefined, bold: toggles.bold.checked, italic: toggles.italic.checked, underline: toggles.underline.checked, strike: toggles.strike.checked});
             const updatePreview = () => {
                 const value = normalizePresets([{...draft(), name: 'preview'}])[0];
-                applyNodeStyle({containEl: preview, data: {stylePreset: 'preview'}, refreshBox() {}}, [value]);
+                applyNodeStyle({containEl: preview, data: {stylePreset: 'preview'}, refreshBox() {}}, [value], plugin.settings.defaultNodeStyle);
             };
             form.addEventListener('input', () => { updatePreview(); save.textContent = t('Save preset'); }); updatePreview();
             const actions = document.createElement('div'); actions.className = 'mm-preset-actions'; form.appendChild(actions);

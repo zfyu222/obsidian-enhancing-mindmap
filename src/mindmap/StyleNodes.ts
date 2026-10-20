@@ -17,7 +17,7 @@ export default class StyleNodes extends Command {
             else delete node.data.stylePreset;
             if (before && entry.local) node.data.nodeStyle = {...entry.local};
             else delete node.data.nodeStyle;
-            applyNodeStyle(node, this.map.setting.nodeStylePresets || []);
+            applyNodeStyle(node, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
         });
         this.map.refresh();
         this.map.emit('mindMapChange');
@@ -42,7 +42,7 @@ export class ChangeNodeStyle extends Command {
             const node = this.map.getNodeById(change.id); if (!node) return;
             const value = before ? change.before : change.after;
             if (value) node.data.nodeStyle = {...value}; else delete node.data.nodeStyle;
-            applyNodeStyle(node, this.map.setting.nodeStylePresets || []);
+            applyNodeStyle(node, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
         });
         this.map.refresh(); this.map.emit('mindMapChange'); this.map.emit('toolbarChange');
     }

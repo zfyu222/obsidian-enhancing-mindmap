@@ -1,5 +1,6 @@
-import { NodeStylePreset } from './nodeStyles';
+import { NodeStylePreset, LocalNodeStyle } from './nodeStyles';
 export class MindMapSettings {
+    defaultNodeStyle: LocalNodeStyle = {};
     nodeStylePresets: NodeStylePreset[] = [];
     theme:string = 'dark';
     canvasSize:number = 8000;

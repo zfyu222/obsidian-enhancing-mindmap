@@ -81,7 +81,7 @@ export default class MindMapPanel {
             const draft = this.sizeDraft; this.cancelFontSize();
             if (draft && this.sameSizeContext(draft)) this.apply('fontSize', draft.value, true);
             map.finishEditingForHistory();
-            this.presetSource = {node: nodes[0], style: snapshotNodeStyle(nodes[0], map.setting.nodeStylePresets || [])};
+            this.presetSource = {node: nodes[0], style: snapshotNodeStyle(nodes[0], map.setting.nodeStylePresets || [], map.setting.defaultNodeStyle)};
             this.presetForm.hidden = false; this.presetError.textContent = ''; this.presetName.value = ''; this.presetName.focus();
         });
         this.presetSection.appendChild(this.savePreset);
@@ -188,7 +188,7 @@ export default class MindMapPanel {
         } else {
             const nodes = this.map.getSelectedNodes();
             if (!nodes.length) return;
-            if (value === undefined) value = !nodes.every(node => !!(effectiveNodeStyle(node, this.map.setting.nodeStylePresets || []) as any)[key]);
+            if (value === undefined) value = !nodes.every(node => !!(effectiveNodeStyle(node, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle) as any)[key]);
             this.map.applyLocalNodeStyle({[key]: value}); if (!keepSizeFocus) this.map.focusAfterHistory();
         }
         this.update();
@@ -212,7 +212,7 @@ export default class MindMapPanel {
             this.presetForm.hidden = true; this.presetSource = undefined;
         }
         this.color.setDisabled(disabled); this.fontSize.disabled = disabled;
-        const styles = nodes.map(node => effectiveNodeStyle(node, presets));
+        const styles = nodes.map(node => effectiveNodeStyle(node, presets, this.map.setting.defaultNodeStyle));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;
         this.box.element.hidden = textMode;
         this.box.setValue({shape: common('shape'), borderColor: common('borderColor'), borderWidth: common('borderWidth'), backgroundColor: common('backgroundColor')}, disabled || textMode);

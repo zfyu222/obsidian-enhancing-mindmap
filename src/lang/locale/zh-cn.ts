@@ -1,6 +1,11 @@
 // 简体中文
 
 export default {
+    "Default node style": "默认节点样式",
+    "Default node style description": "设置未单独指定的节点边框与填充。优先级：节点单独设置 > 节点预设 > 全局默认。保存后应用到所有打开的导图，不改写笔记。",
+    "Save default node style": "保存默认节点样式",
+    "Restore original node style": "恢复原始节点外观",
+
     "Border and fill": "边框与填充",
     "Node shape": "节点形状",
     "No border": "无边框",

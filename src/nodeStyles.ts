@@ -59,12 +59,12 @@ export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
     for (const key of ['bold','italic','underline','strike']) if (typeof value[key] === 'boolean') result[key] = value[key];
     return Object.keys(result).length ? result : undefined;
 }
-export function effectiveNodeStyle(node: any, presets: NodeStylePreset[]) {
-    return {...findPreset(presets, node.data.stylePreset), ...normalizeNodeStyle(node.data.nodeStyle)};
+export function effectiveNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
+    return {...normalizeNodeBoxStyle(defaults), ...normalizeNodeStyle(findPreset(presets, node.data.stylePreset)), ...normalizeNodeStyle(node.data.nodeStyle)};
 }
 /** Snapshot node-wide properties only; inline text markup and preset aliases are excluded. */
-export function snapshotNodeStyle(node: any, presets: NodeStylePreset[]) {
-    const style = effectiveNodeStyle(node, presets);
+export function snapshotNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
+    const style = effectiveNodeStyle(node, presets, defaults);
     return {
         ...normalizeNodeBoxStyle(style),
         color: /^#[0-9a-f]{6}$/i.test(style.color || '') ? style.color : undefined,
@@ -90,9 +90,10 @@ export function readStyleMarker(text: string): {text: string; name?: string; ove
         return {text: text.slice(0, match.index) + text.slice(match.index + match[0].length), name: meta.name, overrides};
     } catch (_) { return {text}; }
 }
-export function applyNodeStyle(node: any, presets: NodeStylePreset[]) {
+export function applyNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
     const base = findPreset(presets, node.data.stylePreset);
-    const preset = base || normalizeNodeStyle(node.data.nodeStyle) ? effectiveNodeStyle(node, presets) : undefined;
+    const fallback = normalizeNodeBoxStyle(defaults);
+    const preset = base || normalizeNodeStyle(node.data.nodeStyle) || Object.keys(fallback).length ? effectiveNodeStyle(node, presets, fallback) : undefined;
     const style = node.containEl.style;
     for (const key of ['color','font-size','weight','italic','decoration','border-color','border-width','radius','background']) style.removeProperty('--mm-preset-' + key);
     node.containEl.classList.toggle('mm-preset-node', !!preset);

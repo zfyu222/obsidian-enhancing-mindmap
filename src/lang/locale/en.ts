@@ -1,6 +1,11 @@
 // English
 
 export default {
+    "Default node style": "Default node style",
+    "Default node style description": "Border and fill for properties not set on a node or preset. Node overrides take priority, then presets, then these defaults. Saving updates open maps without changing notes.",
+    "Save default node style": "Save default node style",
+    "Restore original node style": "Restore original node style",
+
     "Border and fill": "Border and fill",
     "Node shape": "Node shape",
     "No border": "No border",

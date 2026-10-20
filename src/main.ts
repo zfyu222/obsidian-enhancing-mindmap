@@ -1,4 +1,4 @@
-import { normalizePresets } from './nodeStyles';
+import { normalizePresets, normalizeNodeBoxStyle } from './nodeStyles';
 import {
   Plugin,
   WorkspaceLeaf,
@@ -1228,8 +1228,10 @@ export default class MindMapPlugin extends Plugin {
       background: 'transparent',
       layout: 'mindmap',
       layoutDirect: 'mindmap',
+      defaultNodeStyle: {},
       nodeStylePresets: []
     }, await this.loadData());
+    this.settings.defaultNodeStyle = normalizeNodeBoxStyle(this.settings.defaultNodeStyle);
     this.settings.nodeStylePresets = normalizePresets(this.settings.nodeStylePresets);
   }
 
@@ -1237,7 +1239,7 @@ export default class MindMapPlugin extends Plugin {
     await this.saveData(this.settings);
     this.app.workspace.getLeavesOfType(mindmapViewType).forEach(leaf => {
       const map = (leaf.view as MindMapView).mindmap;
-      if (map) { map.setting.nodeStylePresets = this.settings.nodeStylePresets; map.refreshNodeStyles(); }
+      if (map) { map.setting.defaultNodeStyle = this.settings.defaultNodeStyle; map.setting.nodeStylePresets = this.settings.nodeStylePresets; map.refreshNodeStyles(); }
     });
   }
 

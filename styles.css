@@ -409,3 +409,6 @@
 .mm-box-row input[type=color] { width: 32px; height: 28px; padding: 0; margin-left: auto; }
 .mm-side-panel .mm-box-row button, .mm-side-panel .mm-box-row select { width: auto; margin: 0; }
 .mm-box-row button { padding: 4px 8px; }
+
+.mm-default-style { margin-bottom: 16px; border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 12px; }
+.mm-default-style > button { margin-right: 8px; }

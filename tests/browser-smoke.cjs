@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+const names = ['renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -85,7 +85,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
+            Object.assign(window,{Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -523,6 +523,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         });
         const presetSelect=page.locator('.mm-side-panel select[aria-label="Node style preset"]');
         await presetSelect.selectOption('重点');
+
         assert.deepEqual(errors,[]);
         assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),await page.evaluate(()=>beforeStyleUndos+1));
         assert.equal(await page.evaluate(()=>testMap.summaries.items[0].root.data.stylePreset),'重点');
@@ -789,6 +790,49 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).color),'rgb(67, 160, 71)');
         await page.screenshot({path:path.join(screenshotDir,'style-branch-layout.png')});
         console.log('Style presets: settings save/rename/delete, alias references, live rendering, summary nodes, batch undo/redo, inspector toggle and cleanup passed.');
+        // Defaults are global fallbacks, with a persisted editor and explicit reset.
+        await page.evaluate(()=>{
+            const host=document.createElement('div');host.id='default-style-settings';
+            host.style.cssText='position:fixed;right:12px;top:12px;width:370px;max-height:820px;overflow:auto;background:#292d36;color:white;z-index:2000;padding:16px';document.body.appendChild(host);
+            window.defaultPlugin={settings:{defaultNodeStyle:{}},saveSettings:async()=>{
+                if(defaultPlugin.fail)throw new Error('save failed');
+                window.savedDefault=JSON.stringify(defaultPlugin.settings.defaultNodeStyle);
+                testMap.setting.defaultNodeStyle=defaultPlugin.settings.defaultNodeStyle;testMap.refreshNodeStyles();
+            }};
+            renderDefaultNodeStyleSettings(host,defaultPlugin);
+        });
+        const defaults=page.locator('#default-style-settings');
+        await defaults.locator('.mm-default-style > summary').click();
+        await defaults.getByRole('combobox',{name:'Node shape',exact:true}).selectOption('rounded');
+        await defaults.getByRole('combobox',{name:'Border thickness',exact:true}).selectOption('2');
+        await defaults.getByLabel('Fill color',{exact:true}).evaluate(el=>{el.value='#ddeeff';el.dispatchEvent(new Event('change',{bubbles:true}));});
+        assert.equal(await defaults.locator('.mm-node-content').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(221, 238, 255)');
+        const beforeDefaults=await page.evaluate(()=>({md:testMap.getMarkdown(),history:testMap.exec.history.undos.length}));
+        await defaults.getByRole('button',{name:'Save default node style',exact:true}).click();
+        assert.equal(await page.evaluate(()=>JSON.parse(savedDefault).backgroundColor),'#ddeeff');
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).backgroundColor),'rgb(221, 238, 255)');
+        assert.deepEqual(await page.evaluate(()=>({md:testMap.getMarkdown(),history:testMap.exec.history.undos.length})),beforeDefaults);
+        await page.evaluate(()=>{const host=document.querySelector('#default-style-settings');host.textContent='';renderDefaultNodeStyleSettings(host,defaultPlugin);});
+        await defaults.locator('.mm-default-style > summary').click();
+        assert.equal(await defaults.getByLabel('Fill color',{exact:true}).inputValue(),'#ddeeff');
+        await page.evaluate(()=>{testMap.setSelectedNodes([styledBranch]);testMap.applyLocalNodeStyle({backgroundColor:'#aabbcc'});});
+        await defaults.getByLabel('Fill color',{exact:true}).evaluate(el=>{el.value='#eeeeee';el.dispatchEvent(new Event('change',{bubbles:true}));});
+        await defaults.getByRole('button',{name:'Save default node style',exact:true}).click();
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).backgroundColor),'rgb(170, 187, 204)');
+        await page.evaluate(()=>testMap.undo());
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).backgroundColor),'rgb(238, 238, 238)');
+        await page.evaluate(()=>styledBranch.setText('Default style inherited'));
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).borderTopWidth),'2px');
+        await page.screenshot({path:path.join(screenshotDir,'default-node-style.png')});
+        await page.evaluate(()=>defaultPlugin.fail=true);
+        await defaults.getByRole('button',{name:'Restore original node style',exact:true}).click();
+        assert.equal(await defaults.locator('[role=alert]').textContent(),'Unable to save presets');
+        assert.equal(await page.evaluate(()=>defaultPlugin.settings.defaultNodeStyle.backgroundColor),'#eeeeee');
+        await page.evaluate(()=>defaultPlugin.fail=false);
+        await defaults.getByRole('button',{name:'Restore original node style',exact:true}).click();
+        assert.deepEqual(await page.evaluate(()=>JSON.parse(savedDefault)),{});
+        assert.equal(await page.evaluate(()=>styledBranch.containEl.classList.contains('mm-box-border')),false);
+        console.log('Default node styles: preview, persistence, global fallback, explicit override, undo inheritance, renderer, failed save and reset passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
