@@ -601,7 +601,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await settings.getByLabel('Preset name',{exact:true}).fill('结论');
         await settings.getByRole('button',{name:'Follow theme',exact:true}).click();
         await settings.getByRole('button',{name:'Save preset',exact:true}).click();
-        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets[0].color),undefined);
+        assert.equal(await page.evaluate(()=>stylePlugin.settings.nodeStylePresets[0].color),'');
         assert.equal(await page.evaluate(()=>testMap.root.containEl.classList.contains('mm-preset-color')),false);
         await settings.getByRole('button',{name:'Delete preset',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点');
@@ -807,14 +807,35 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await defaults.getByRole('combobox',{name:'Border thickness',exact:true}).selectOption('2');
         await defaults.getByLabel('Fill color',{exact:true}).evaluate(el=>{el.value='#ddeeff';el.dispatchEvent(new Event('change',{bubbles:true}));});
         assert.equal(await defaults.locator('.mm-node-content').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(221, 238, 255)');
+
+        await defaults.getByRole('button',{name:'Blue',exact:true}).click();
+        await defaults.getByLabel('Font size',{exact:true}).fill('19');
+        for (const label of ['Bold','Italic','Underline','Strikethrough']) await defaults.getByLabel(label,{exact:true}).check();
+        const previewText=await defaults.locator('.mm-node-content').evaluate(el=>{const c=getComputedStyle(el);return {color:c.color,size:c.fontSize,weight:c.fontWeight,italic:c.fontStyle,decoration:c.textDecorationLine};});
+        assert.equal(previewText.color,'rgb(30, 136, 229)');assert.equal(previewText.size,'19px');assert.equal(previewText.weight,'700');assert.equal(previewText.italic,'italic');assert.match(previewText.decoration,/underline/);assert.match(previewText.decoration,/line-through/);
+        await defaults.getByLabel('Font size',{exact:true}).fill('99');
+        await defaults.getByRole('button',{name:'Save default node style',exact:true}).click();
+        assert.equal(await defaults.locator('[role=alert]').textContent(),'Invalid preset values');
+        assert.equal(await page.evaluate(()=>window.savedDefault),undefined);
+        await defaults.getByLabel('Font size',{exact:true}).fill('19');
         const beforeDefaults=await page.evaluate(()=>({md:testMap.getMarkdown(),history:testMap.exec.history.undos.length}));
         await defaults.getByRole('button',{name:'Save default node style',exact:true}).click();
         assert.equal(await page.evaluate(()=>JSON.parse(savedDefault).backgroundColor),'#ddeeff');
+        assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).fontStyle),'italic');
+        await page.screenshot({path:path.join(screenshotDir,'default-node-text-style.png')});
         assert.equal(await page.evaluate(()=>getComputedStyle(styledBranch.contentEl).backgroundColor),'rgb(221, 238, 255)');
         assert.deepEqual(await page.evaluate(()=>({md:testMap.getMarkdown(),history:testMap.exec.history.undos.length})),beforeDefaults);
         await page.evaluate(()=>{const host=document.querySelector('#default-style-settings');host.textContent='';renderDefaultNodeStyleSettings(host,defaultPlugin);});
         await defaults.locator('.mm-default-style > summary').click();
         assert.equal(await defaults.getByLabel('Fill color',{exact:true}).inputValue(),'#ddeeff');
+        assert.equal(await defaults.getByLabel('Font size',{exact:true}).inputValue(),'19');
+        assert.equal(await defaults.getByLabel('Bold',{exact:true}).isChecked(),true);
+        assert.equal(await page.evaluate(()=>testMap.root.containEl.style.getPropertyValue('--mm-preset-color')),'#1e88e5');
+        assert.equal(await page.evaluate(()=>JSON.parse(savedDefault).italic),true);
+        await defaults.getByLabel('Font size',{exact:true}).fill('');
+        await defaults.getByRole('button',{name:'Follow theme',exact:true}).first().click();
+        for (const label of ['Bold','Italic','Underline','Strikethrough']) await defaults.getByLabel(label,{exact:true}).uncheck();
+
         await page.evaluate(()=>{testMap.setSelectedNodes([styledBranch]);testMap.applyLocalNodeStyle({backgroundColor:'#aabbcc'});});
         await defaults.getByLabel('Fill color',{exact:true}).evaluate(el=>{el.value='#eeeeee';el.dispatchEvent(new Event('change',{bubbles:true}));});
         await defaults.getByRole('button',{name:'Save default node style',exact:true}).click();
@@ -832,6 +853,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await defaults.getByRole('button',{name:'Restore original node style',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>JSON.parse(savedDefault)),{});
         assert.equal(await page.evaluate(()=>styledBranch.containEl.classList.contains('mm-box-border')),false);
+        assert.equal(await defaults.getByLabel('Font size',{exact:true}).inputValue(),'');
+        assert.equal(await defaults.getByLabel('Bold',{exact:true}).isChecked(),false);
         console.log('Default node styles: preview, persistence, global fallback, explicit override, undo inheritance, renderer, failed save and reset passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

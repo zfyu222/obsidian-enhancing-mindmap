@@ -7,7 +7,7 @@ export interface NodeStylePreset {
     name: string;
     aliases?: string[];
     color?: string;
-    fontSize?: number;
+    fontSize?: number | null;
     bold?: boolean;
     italic?: boolean;
     underline?: boolean;
@@ -23,9 +23,9 @@ export function normalizePresets(value: unknown): NodeStylePreset[] {
         ...normalizeNodeBoxStyle(p),
         name: p.name,
         aliases: Array.isArray(p.aliases) ? p.aliases.filter((a: unknown) => validPresetName(a) && a !== p.name) : [],
-        color: /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : undefined,
-        fontSize: Number.isFinite(p.fontSize) && p.fontSize >= 8 && p.fontSize <= 72 ? p.fontSize : undefined,
-        bold: p.bold === true, italic: p.italic === true, underline: p.underline === true, strike: p.strike === true
+        color: p.color === '' || /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : undefined,
+        fontSize: p.fontSize === null || (Number.isFinite(p.fontSize) && p.fontSize >= 8 && p.fontSize <= 72) ? p.fontSize : undefined,
+        bold: typeof p.bold === 'boolean' ? p.bold : undefined, italic: typeof p.italic === 'boolean' ? p.italic : undefined, underline: typeof p.underline === 'boolean' ? p.underline : undefined, strike: typeof p.strike === 'boolean' ? p.strike : undefined
     }));
 }
 export function findPreset(presets: NodeStylePreset[], name: string): NodeStylePreset | undefined {
@@ -60,15 +60,15 @@ export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
     return Object.keys(result).length ? result : undefined;
 }
 export function effectiveNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
-    return {...normalizeNodeBoxStyle(defaults), ...normalizeNodeStyle(findPreset(presets, node.data.stylePreset)), ...normalizeNodeStyle(node.data.nodeStyle)};
+    return {...normalizeNodeStyle(defaults), ...normalizeNodeStyle(findPreset(presets, node.data.stylePreset)), ...normalizeNodeStyle(node.data.nodeStyle)};
 }
 /** Snapshot node-wide properties only; inline text markup and preset aliases are excluded. */
 export function snapshotNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
     const style = effectiveNodeStyle(node, presets, defaults);
     return {
         ...normalizeNodeBoxStyle(style),
-        color: /^#[0-9a-f]{6}$/i.test(style.color || '') ? style.color : undefined,
-        fontSize: typeof style.fontSize === 'number' ? style.fontSize : undefined,
+        color: style.color === '' || /^#[0-9a-f]{6}$/i.test(style.color || '') ? style.color : undefined,
+        fontSize: style.fontSize === null || typeof style.fontSize === 'number' ? style.fontSize : undefined,
         bold: style.bold === true, italic: style.italic === true,
         underline: style.underline === true, strike: style.strike === true
     };
@@ -92,7 +92,7 @@ export function readStyleMarker(text: string): {text: string; name?: string; ove
 }
 export function applyNodeStyle(node: any, presets: NodeStylePreset[], defaults?: LocalNodeStyle) {
     const base = findPreset(presets, node.data.stylePreset);
-    const fallback = normalizeNodeBoxStyle(defaults);
+    const fallback = normalizeNodeStyle(defaults) || {};
     const preset = base || normalizeNodeStyle(node.data.nodeStyle) || Object.keys(fallback).length ? effectiveNodeStyle(node, presets, fallback) : undefined;
     const style = node.containEl.style;
     for (const key of ['color','font-size','weight','italic','decoration','border-color','border-width','radius','background']) style.removeProperty('--mm-preset-' + key);

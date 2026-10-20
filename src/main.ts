@@ -1,4 +1,4 @@
-import { normalizePresets, normalizeNodeBoxStyle } from './nodeStyles';
+import { normalizePresets, normalizeNodeStyle } from './nodeStyles';
 import {
   Plugin,
   WorkspaceLeaf,
@@ -1231,7 +1231,7 @@ export default class MindMapPlugin extends Plugin {
       defaultNodeStyle: {},
       nodeStylePresets: []
     }, await this.loadData());
-    this.settings.defaultNodeStyle = normalizeNodeBoxStyle(this.settings.defaultNodeStyle);
+    this.settings.defaultNodeStyle = normalizeNodeStyle(this.settings.defaultNodeStyle) || {};
     this.settings.nodeStylePresets = normalizePresets(this.settings.nodeStylePresets);
   }
 

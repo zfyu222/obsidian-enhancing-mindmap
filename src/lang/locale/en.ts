@@ -1,8 +1,10 @@
 // English
 
 export default {
+    "Inherit default text style": "Inherit default text style",
+
     "Default node style": "Default node style",
-    "Default node style description": "Border and fill for properties not set on a node or preset. Node overrides take priority, then presets, then these defaults. Saving updates open maps without changing notes.",
+    "Default node style description": "Text, border and fill for properties not set on a node or preset. Node overrides take priority, then presets, then these defaults. Saving updates open maps without changing notes.",
     "Save default node style": "Save default node style",
     "Restore original node style": "Restore original node style",
 

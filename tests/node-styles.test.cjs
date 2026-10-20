@@ -240,3 +240,29 @@ test('default settings load safely and refresh multiple maps without changing hi
     const legacy={loadData:async()=>({fontSize:18})};await Plugin.prototype.loadSettings.call(legacy);
     assert.equal(Object.keys(legacy.settings.defaultNodeStyle).length,0);
 });
+
+
+test('default text style persists, inherits through partial presets, and honors explicit text resets',async()=>{
+    const defaults={color:'#123456',fontSize:19,bold:true,italic:true,underline:true,strike:true,backgroundColor:'#eeeeee'};
+    const plugin={loadData:async()=>({defaultNodeStyle:defaults})};await Plugin.prototype.loadSettings.call(plugin);
+    assert.equal(plugin.settings.defaultNodeStyle.fontSize,19);assert.equal(plugin.settings.defaultNodeStyle.bold,true);
+    const presets=styles.normalizePresets([{name:'Partial',backgroundColor:'#ffffff'},{name:'Off',bold:false,italic:false,underline:false,strike:false}]);
+    const n=node('Inherited');n.data.stylePreset='Partial';
+    let value=styles.effectiveNodeStyle(n,presets,plugin.settings.defaultNodeStyle);
+    assert.equal(value.bold,true);assert.equal(value.color,'#123456');assert.equal(value.fontSize,19);assert.equal(value.backgroundColor,'#ffffff');
+    styles.applyNodeStyle(n,presets,defaults);
+    assert.equal(n.containEl.style.getPropertyValue('--mm-preset-font-size'),'19px');assert.equal(n.containEl.style.getPropertyValue('--mm-preset-weight'),'700');
+    n.data.stylePreset='Off';value=styles.effectiveNodeStyle(n,presets,defaults);assert.equal(value.bold,false);assert.equal(value.strike,false);
+    n.data.nodeStyle={color:'',fontSize:null,bold:false,italic:false,underline:false,strike:false};
+    const resetPreset=styles.normalizePresets([{name:'Reset',...styles.snapshotNodeStyle(n,presets,defaults)}])[0];
+    assert.equal(resetPreset.color,'');assert.equal(resetPreset.fontSize,null);
+    styles.applyNodeStyle(n,presets,defaults);
+    assert.equal(n.containEl.classList.contains('mm-preset-color'),false);assert.equal(n.containEl.classList.contains('mm-preset-size'),false);
+    assert.equal(n.containEl.style.getPropertyValue('--mm-preset-weight'),'normal');assert.equal(n.containEl.style.getPropertyValue('--mm-preset-decoration'),'none');
+    const map=mapFixture();delete map.root.data.stylePreset;map.setting.defaultNodeStyle=defaults;
+    const before=map.getMarkdown();map.refreshNodeStyles();assert.equal(map.getMarkdown(),before);
+    map.selectedNodes=[map.root];map.applyLocalNodeStyle({bold:false});map.exec.history.undo();
+    assert.equal(map.root.containEl.style.getPropertyValue('--mm-preset-weight'),'700');
+    const invalid={loadData:async()=>({defaultNodeStyle:{color:'url(x)',fontSize:999,bold:'true'}})};
+    await Plugin.prototype.loadSettings.call(invalid);assert.equal(Object.keys(invalid.settings.defaultNodeStyle).length,0);
+});

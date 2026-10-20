@@ -1,4 +1,4 @@
-import { NodeStylePreset, normalizeNodeBoxStyle, normalizePresets, renamePreset, applyNodeStyle } from './nodeStyles';
+import { NodeStylePreset, LocalNodeStyle, normalizeNodeStyle, normalizePresets, renamePreset, applyNodeStyle } from './nodeStyles';
 import { t } from './lang/helpers';
 
 /** Preset swatches and the platform color palette share one optional color value. */
@@ -68,23 +68,47 @@ export function renderDefaultNodeStyleSettings(host: HTMLElement, plugin: any) {
     const section = document.createElement('details'); section.className = 'mm-default-style'; host.appendChild(section);
     const title = document.createElement('summary'); title.textContent = t('Default node style'); section.appendChild(title);
     const description = document.createElement('p'); description.textContent = t('Default node style description'); section.appendChild(description);
-    let draft = {...normalizeNodeBoxStyle(plugin.settings.defaultNodeStyle)};
-    const box = renderNodeBoxControls(section, patch => { draft = {...draft, ...patch}; box.setValue(draft); update(); save.textContent = t('Save default node style'); });
-    box.element.open = true; box.setValue(draft);
-    const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview';
+    let draft: LocalNodeStyle = {...normalizeNodeStyle(plugin.settings.defaultNodeStyle)};
+    const color = renderPresetColorPicker(section, draft.color, () => { draft.color = color.value; changed(); });
+    const row = document.createElement('label'); row.className = 'mm-preset-field'; row.textContent = t('Font size'); section.appendChild(row);
+    const size = document.createElement('input'); size.type = 'number'; size.min = '8'; size.max = '72'; size.step = 'any'; size.setAttribute('aria-label',t('Font size')); row.appendChild(size);
+    const configuredSize = Number(plugin.settings.fontSize);
+    const baseSize = Number.isFinite(configuredSize) && configuredSize > 0 ? configuredSize : 16;
+    size.placeholder = `${t('Default')} (${baseSize})`;
+    size.addEventListener('input', () => {
+        if (size.value) draft.fontSize = Number(size.value); else delete draft.fontSize;
+        changed();
+    });
+    const toggles: Record<string,HTMLInputElement> = {};
+    for (const [key,label] of [['bold','Bold'],['italic','Italic'],['underline','Underline'],['strike','Strikethrough']]) {
+        const labelEl = document.createElement('label'); labelEl.className = 'mm-preset-field'; labelEl.textContent = t(label as any); section.appendChild(labelEl);
+        const input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('aria-label',t(label as any)); labelEl.appendChild(input); toggles[key] = input;
+        input.addEventListener('change', () => { (draft as any)[key] = input.checked; changed(); });
+    }
+    const box = renderNodeBoxControls(section, patch => { draft = {...draft, ...patch}; changed(); }); box.element.open = true;
+    const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview'; preview.style.fontSize = baseSize + 'px';
     const content = document.createElement('div'); content.className = 'mm-node-content'; content.textContent = t('Preset preview'); preview.appendChild(content); section.appendChild(preview);
-    const update = () => applyNodeStyle({containEl:preview,data:{},refreshBox(){}}, [], draft); update();
+    const update = () => applyNodeStyle({containEl:preview,data:{},refreshBox(){}}, [], draft);
     const error = document.createElement('p'); error.className = 'mm-preset-error'; error.setAttribute('role','alert'); section.appendChild(error);
     const save = document.createElement('button'); save.type = 'button'; save.textContent = t('Save default node style'); section.appendChild(save);
     const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = t('Restore original node style'); section.appendChild(reset);
-    const commit = async (value: any) => {
-        const before = plugin.settings.defaultNodeStyle; save.disabled = true; reset.disabled = true; box.setValue(draft,true);
-        plugin.settings.defaultNodeStyle = normalizeNodeBoxStyle(value);
+    const changed = () => { box.setValue(draft); update(); save.textContent = t('Save default node style'); error.textContent = ''; };
+    const sync = (disabled = false) => {
+        color.setValue(draft.color); color.setDisabled(disabled); size.value = draft.fontSize?.toString() || ''; size.disabled = disabled;
+        for (const key of Object.keys(toggles)) { toggles[key].checked = !!(draft as any)[key]; toggles[key].disabled = disabled; }
+        box.setValue(draft, disabled); update();
+    }; sync();
+    const commit = async (value: LocalNodeStyle) => {
+        const before = plugin.settings.defaultNodeStyle; save.disabled = true; reset.disabled = true; sync(true);
+        plugin.settings.defaultNodeStyle = normalizeNodeStyle(value) || {};
         try { await plugin.saveSettings(); draft = {...plugin.settings.defaultNodeStyle}; error.textContent = ''; save.textContent = t('Preset saved'); }
         catch (_) { plugin.settings.defaultNodeStyle = before; error.textContent = t('Unable to save presets'); }
-        finally { save.disabled = false; reset.disabled = false; box.setValue(draft); update(); }
+        finally { save.disabled = false; reset.disabled = false; sync(); }
     };
-    save.addEventListener('click', () => void commit(draft));
+    save.addEventListener('click', () => {
+        if (!size.validity.valid) { error.textContent = t('Invalid preset values'); return; }
+        void commit(draft);
+    });
     reset.addEventListener('click', () => void commit({}));
 }
 
@@ -111,13 +135,15 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
                 row.appendChild(input); form.appendChild(row); return input;
             };
             const name = field(t('Preset name'), 'text', preset.name); name.maxLength = 80;
-            const color = renderPresetColorPicker(form, preset.color, () => { updatePreview(); save.textContent = t('Save preset'); });
+            let presetColor = preset.color;
+            const color = renderPresetColorPicker(form, preset.color === undefined ? plugin.settings.defaultNodeStyle?.color : preset.color, () => { presetColor = color.value; updatePreview(); save.textContent = t('Save preset'); });
             let boxDraft = {shape: preset.shape, borderColor: preset.borderColor, borderWidth: preset.borderWidth, backgroundColor: preset.backgroundColor};
             const box = renderNodeBoxControls(form, patch => { boxDraft = {...boxDraft, ...patch}; updatePreview(); save.textContent = t('Save preset'); });
             box.setValue(boxDraft);
             const size = field(t('Preset font size'), 'number', preset.fontSize?.toString() || ''); size.min = '8'; size.max = '72';
-            const configuredSize = Number(plugin.settings.fontSize);
+            const configuredSize = Number(plugin.settings.defaultNodeStyle?.fontSize || plugin.settings.fontSize);
             const defaultSize = Number.isFinite(configuredSize) && configuredSize > 0 ? configuredSize : 16;
+            let sizeTouched = false; size.addEventListener('input', () => { sizeTouched = true; });
             size.classList.add('mm-preset-font-size');
             size.placeholder = `${t('Default')} (${defaultSize})`;
             size.title = `${t('Global default font size')}: ${defaultSize} px`;
@@ -125,13 +151,15 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
             sizeHint.textContent = `${t('Global default font size')}: ${defaultSize} px`; form.appendChild(sizeHint);
             const toggles: Record<string, HTMLInputElement> = {};
             for (const [key, label] of [['bold', 'Bold'], ['italic', 'Italic'], ['underline', 'Underline'], ['strike', 'Strikethrough']]) {
-                const input = field(t(label as any), 'checkbox', ''); input.checked = !!(preset as any)[key]; toggles[key] = input;
+                const input = field(t(label as any), 'checkbox', ''); input.checked = typeof (preset as any)[key] === 'boolean' ? (preset as any)[key] : !!plugin.settings.defaultNodeStyle?.[key];
+                input.indeterminate = typeof (preset as any)[key] !== 'boolean';
+                input.title = input.indeterminate ? t('Inherit default text style') : ''; toggles[key] = input;
             }
             const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview'; preview.style.fontSize = defaultSize + 'px';
             const content = document.createElement('div'); content.className = 'mm-node-content'; content.textContent = t('Preset preview'); preview.appendChild(content); form.appendChild(preview);
             const error = document.createElement('p'); error.className = 'mm-preset-error'; error.setAttribute('role', 'alert'); form.appendChild(error);
-            const draft = (): NodeStylePreset => ({...preset, ...boxDraft, name: name.value.trim(), color: color.value.trim() || undefined,
-                fontSize: size.value ? Number(size.value) : undefined, bold: toggles.bold.checked, italic: toggles.italic.checked, underline: toggles.underline.checked, strike: toggles.strike.checked});
+            const draft = (): NodeStylePreset => ({...preset, ...boxDraft, name: name.value.trim(), color: presetColor,
+                fontSize: sizeTouched ? (size.value ? Number(size.value) : undefined) : preset.fontSize, bold: toggles.bold.indeterminate ? undefined : toggles.bold.checked, italic: toggles.italic.indeterminate ? undefined : toggles.italic.checked, underline: toggles.underline.indeterminate ? undefined : toggles.underline.checked, strike: toggles.strike.indeterminate ? undefined : toggles.strike.checked});
             const updatePreview = () => {
                 const value = normalizePresets([{...draft(), name: 'preview'}])[0];
                 applyNodeStyle({containEl: preview, data: {stylePreset: 'preview'}, refreshBox() {}}, [value], plugin.settings.defaultNodeStyle);
@@ -142,7 +170,7 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
             const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = t('Delete preset'); actions.appendChild(remove);
             form.addEventListener('submit', async event => {
                 event.preventDefault(); const value = draft();
-                if ((value.color && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.fontSize !== undefined && (!Number.isFinite(value.fontSize) || value.fontSize < 8 || value.fontSize > 72))) {
+                if ((value.color && !/^#[0-9a-f]{6}$/i.test(value.color)) || (value.fontSize !== undefined && value.fontSize !== null && (!Number.isFinite(value.fontSize) || value.fontSize < 8 || value.fontSize > 72))) {
                     error.textContent = t('Invalid preset values'); return;
                 }
                 if (!renamePreset(presets, preset, value.name)) { error.textContent = t('Invalid preset name'); return; }
