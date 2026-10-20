@@ -1,6 +1,6 @@
 import MindMap from './mindmap/mindmap';
 import { findPreset, effectiveNodeStyle, validPresetName, snapshotNodeStyle } from './nodeStyles';
-import { renderPresetColorPicker } from './StylePresetSettings';
+import { renderPresetColorPicker, renderNodeBoxControls } from './StylePresetSettings';
 import { editorSelection, applyEditorStyle } from './mindmap/text-format';
 import { t } from './lang/helpers';
 
@@ -16,6 +16,7 @@ export default class MindMapPanel {
     private sizeDraft?: {nodes: any[]; editor?: any; text?: {node: any; text: string; start: number; end: number}; value: number | null};
     private reset: HTMLButtonElement;
     private color: ReturnType<typeof renderPresetColorPicker>;
+    private box: ReturnType<typeof renderNodeBoxControls>;
     private buttons: Record<string,HTMLButtonElement> = {};
     private textSelection?: {node: any; text: string; start: number; end: number};
     private pending = false;
@@ -58,6 +59,10 @@ export default class MindMapPanel {
             button.addEventListener('mousedown', e => e.preventDefault()); button.addEventListener('click', () => this.apply(key));
             this.buttons[key] = button; toggles.appendChild(button);
         }
+        this.box = renderNodeBoxControls(section, patch => {
+            if (this.pending || this.textSelection || map.isComposing || !map.getSelectedNodes().length) return;
+            this.cancelFontSize(); map.applyLocalNodeStyle(patch); this.update();
+        });
         this.reset = document.createElement('button'); this.reset.type = 'button'; this.reset.textContent = t('Clear local node style');
         this.reset.addEventListener('click', () => { this.cancelFontSize(); map.applyLocalNodeStyle(); map.focusAfterHistory(); }); section.appendChild(this.reset);
         this.presetSection = document.createElement('section'); this.presetSection.className = 'mm-panel-presets'; this.element.appendChild(this.presetSection);
@@ -209,6 +214,8 @@ export default class MindMapPanel {
         this.color.setDisabled(disabled); this.fontSize.disabled = disabled;
         const styles = nodes.map(node => effectiveNodeStyle(node, presets));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;
+        this.box.element.hidden = textMode;
+        this.box.setValue({shape: common('shape'), borderColor: common('borderColor'), borderWidth: common('borderWidth'), backgroundColor: common('backgroundColor')}, disabled || textMode);
         const sizes = nodes.map((node, index) => {
             const explicit = styles[index].fontSize;
             if (typeof explicit === 'number') return explicit;

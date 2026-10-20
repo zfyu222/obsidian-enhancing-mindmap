@@ -160,3 +160,38 @@ test('saving a node style snapshots effective values but excludes names, aliases
     assert.equal(snapshot.bold,false);assert.equal(snapshot.name,undefined);assert.equal(snapshot.aliases,undefined);
     snapshot.color='#123456';assert.equal(a.data.nodeStyle.color,'#43a047');assert.equal(map.setting.nodeStylePresets[0].color,'#e53935');
 });
+
+
+test('box styles persist through presets, Markdown, clipboard and atomic batch history',()=>{
+    const map=mapFixture(),a=node('A',map.root),b=node('B',map.root);
+    const box={shape:'pill',borderColor:'#123456',borderWidth:3,backgroundColor:'#eeeeee'};
+    map.selectedNodes=[a,b];map.applyLocalNodeStyle(box);
+    assert.equal(map.exec.history.undos.length,1);
+    assert.equal(a.containEl.classList.contains('mm-box-border'),true);
+    assert.equal(a.containEl.style.getPropertyValue('--mm-preset-radius'),'999px');
+    const parsed=View.prototype.mdToData.call({},map.getMarkdown());
+    assert.deepEqual(JSON.parse(JSON.stringify(parsed.children[0].nodeStyle)),box);
+    const copied=clipboard.parseSubtree(clipboard.serializeForest([a]),()=>`box-${++serial}`);
+    assert.equal(copied[0].nodeStyle.shape,'pill');assert.equal(copied[0].nodeStyle.borderWidth,3);
+    const preset=styles.normalizePresets([{name:'Box',...styles.snapshotNodeStyle(a,map.setting.nodeStylePresets)}])[0];
+    assert.equal(preset.shape,'pill');assert.equal(preset.backgroundColor,'#eeeeee');
+    map.exec.history.undo();assert.equal(a.data.nodeStyle,undefined);assert.equal(b.containEl.classList.contains('mm-box-border'),false);
+    map.exec.history.redo();assert.equal(b.data.nodeStyle.borderWidth,3);
+    map.applyLocalNodeStyle({shape:'none',backgroundColor:''});
+    assert.equal(a.containEl.classList.contains('mm-box-border'),false);
+    assert.equal(a.containEl.style.getPropertyValue('--mm-preset-background'),'transparent');
+    map.exec.history.undo();assert.equal(a.data.nodeStyle.shape,'pill');
+    const entry={id:'box-summary',memberIds:['a'],root:{id:'box-summary',text:'Summary',nodeStyle:box,expanded:true,children:[]}};
+    assert.equal(markdown.extractSummaries(markdown.summaryMarkdown([entry])).entries[0].root.nodeStyle.shape,'pill');
+});
+test('box validation rejects unsafe CSS and unsupported geometry while old nodes have no box classes',()=>{
+    assert.equal(styles.normalizeNodeStyle({shape:'url(x)',borderColor:'red;position:fixed',borderWidth:-1,backgroundColor:'url(x)'}),undefined);
+    assert.equal(styles.normalizeNodeStyle({borderWidth:1.5}),undefined);
+    const n=node('old');delete n.data.stylePreset;styles.applyNodeStyle(n,[]);
+    assert.equal(n.containEl.classList.contains('mm-box-shape'),false);
+    assert.equal(n.containEl.classList.contains('mm-box-fill'),false);
+    n.data.nodeStyle={shape:'rounded',borderWidth:2};styles.applyNodeStyle(n,[]);
+    assert.equal(n.containEl.style.getPropertyValue('--mm-preset-radius'),'8px');
+    delete n.data.nodeStyle;styles.applyNodeStyle(n,[]);
+    assert.equal(n.containEl.classList.contains('mm-box-border'),false);
+});

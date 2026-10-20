@@ -1,5 +1,9 @@
 /** Shared preset definitions; notes store names, never a snapshot of these values. */
 export interface NodeStylePreset {
+    shape?: "none" | "rectangle" | "rounded" | "pill";
+    borderColor?: string;
+    borderWidth?: number;
+    backgroundColor?: string;
     name: string;
     aliases?: string[];
     color?: string;
@@ -16,6 +20,7 @@ export function normalizePresets(value: unknown): NodeStylePreset[] {
     if (!Array.isArray(value)) return [];
     const used = new Set<string>();
     return value.filter(p => p && validPresetName(p.name) && !used.has(p.name) && !!used.add(p.name)).map(p => ({
+        ...normalizeNodeBoxStyle(p),
         name: p.name,
         aliases: Array.isArray(p.aliases) ? p.aliases.filter((a: unknown) => validPresetName(a) && a !== p.name) : [],
         color: /^#[0-9a-f]{6}$/i.test(p.color || '') ? p.color : undefined,
@@ -34,10 +39,21 @@ export function renamePreset(presets: NodeStylePreset[], preset: NodeStylePreset
     }
     return true;
 }
-export interface LocalNodeStyle { color?: string; fontSize?: number | null; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
+export interface LocalNodeStyle extends Pick<NodeStylePreset, "shape" | "borderColor" | "borderWidth" | "backgroundColor"> { color?: string; fontSize?: number | null; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
+/** Keep box properties optional so older notes retain their appearance. */
+export function normalizeNodeBoxStyle(value: any) {
+    const result: Pick<NodeStylePreset, 'shape' | 'borderColor' | 'borderWidth' | 'backgroundColor'> = {};
+    if (!value || typeof value !== 'object') return result;
+    if (['none','rectangle','rounded','pill'].includes(value.shape)) result.shape = value.shape;
+    for (const key of ['borderColor','backgroundColor'] as const) {
+        if (value[key] === '' || /^#[0-9a-f]{6}$/i.test(value[key] || '')) result[key] = value[key];
+    }
+    if (Number.isInteger(value.borderWidth) && value.borderWidth >= 1 && value.borderWidth <= 4) result.borderWidth = value.borderWidth;
+    return result;
+}
 export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-    const result: any = {};
+    const result: any = {...normalizeNodeBoxStyle(value)};
     if (value.color === '' || /^#[0-9a-f]{6}$/i.test(value.color || '')) result.color = value.color;
     if (value.fontSize === null || (Number.isFinite(value.fontSize) && value.fontSize >= 8 && value.fontSize <= 72)) result.fontSize = value.fontSize;
     for (const key of ['bold','italic','underline','strike']) if (typeof value[key] === 'boolean') result[key] = value[key];
@@ -50,6 +66,7 @@ export function effectiveNodeStyle(node: any, presets: NodeStylePreset[]) {
 export function snapshotNodeStyle(node: any, presets: NodeStylePreset[]) {
     const style = effectiveNodeStyle(node, presets);
     return {
+        ...normalizeNodeBoxStyle(style),
         color: /^#[0-9a-f]{6}$/i.test(style.color || '') ? style.color : undefined,
         fontSize: typeof style.fontSize === 'number' ? style.fontSize : undefined,
         bold: style.bold === true, italic: style.italic === true,
@@ -77,11 +94,18 @@ export function applyNodeStyle(node: any, presets: NodeStylePreset[]) {
     const base = findPreset(presets, node.data.stylePreset);
     const preset = base || normalizeNodeStyle(node.data.nodeStyle) ? effectiveNodeStyle(node, presets) : undefined;
     const style = node.containEl.style;
-    for (const key of ['color','font-size','weight','italic','decoration']) style.removeProperty('--mm-preset-' + key);
+    for (const key of ['color','font-size','weight','italic','decoration','border-color','border-width','radius','background']) style.removeProperty('--mm-preset-' + key);
     node.containEl.classList.toggle('mm-preset-node', !!preset);
     node.containEl.classList.toggle('mm-preset-color', !!preset?.color);
     node.containEl.classList.toggle('mm-preset-size', !!preset?.fontSize);
+    node.containEl.classList.toggle('mm-box-shape', !!preset?.shape);
+    node.containEl.classList.toggle('mm-box-border', !!preset?.shape && preset.shape !== 'none');
+    node.containEl.classList.toggle('mm-box-fill', preset?.backgroundColor !== undefined);
     if (preset) {
+        style.setProperty('--mm-preset-border-color', preset.borderColor || 'var(--text-normal, currentColor)');
+        style.setProperty('--mm-preset-border-width', (preset.borderWidth || 1) + 'px');
+        style.setProperty('--mm-preset-radius', preset.shape === 'pill' ? '999px' : preset.shape === 'rounded' ? '8px' : '0px');
+        style.setProperty('--mm-preset-background', preset.backgroundColor || 'transparent');
         if (preset.color) style.setProperty('--mm-preset-color', preset.color);
         if (preset.fontSize) style.setProperty('--mm-preset-font-size', preset.fontSize + 'px');
         style.setProperty('--mm-preset-weight', preset.bold ? '700' : 'normal');

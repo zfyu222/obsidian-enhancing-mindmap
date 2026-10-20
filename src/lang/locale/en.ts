@@ -1,6 +1,17 @@
 // English
 
 export default {
+    "Border and fill": "Border and fill",
+    "Node shape": "Node shape",
+    "No border": "No border",
+    "Rectangle": "Rectangle",
+    "Rounded rectangle": "Rounded rectangle",
+    "Pill": "Pill",
+    "Border thickness": "Border thickness",
+    "Border color": "Border color",
+    "Fill color": "Fill color",
+    "Transparent": "Transparent",
+
     "Close mind map panel": "Close mind map panel",
     "Global default font size": "Global default font size",
     "Mixed font sizes": "Mixed font sizes",

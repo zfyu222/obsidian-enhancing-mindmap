@@ -1,6 +1,17 @@
 // 简体中文
 
 export default {
+    "Border and fill": "边框与填充",
+    "Node shape": "节点形状",
+    "No border": "无边框",
+    "Rectangle": "矩形",
+    "Rounded rectangle": "圆角矩形",
+    "Pill": "胶囊形",
+    "Border thickness": "边框粗细",
+    "Border color": "边框颜色",
+    "Fill color": "填充颜色",
+    "Transparent": "透明",
+
     "Close mind map panel": "关闭思维导图面板",
     "Global default font size": "全局默认字号",
     "Mixed font sizes": "不同字号",

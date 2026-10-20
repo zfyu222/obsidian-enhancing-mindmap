@@ -36,6 +36,33 @@ export function renderPresetColorPicker(host: HTMLElement, initial: string | und
     };
 }
 
+/** A compact shared editor for node-wide box styling. */
+export function renderNodeBoxControls(host: HTMLElement, onChange: (patch: any) => void) {
+    const element = document.createElement('details'); element.className = 'mm-box-controls'; host.appendChild(element);
+    const heading = document.createElement('summary'); heading.textContent = t('Border and fill'); element.appendChild(heading);
+    const row = (label: string) => { const el = document.createElement('label'); el.className = 'mm-box-row'; el.textContent = t(label as any); element.appendChild(el); return el; };
+    const shape = document.createElement('select'); shape.setAttribute('aria-label', t('Node shape'));
+    for (const [value,label] of [['none','No border'],['rectangle','Rectangle'],['rounded','Rounded rectangle'],['pill','Pill']]) {
+        const option = document.createElement('option'); option.value = value; option.textContent = t(label as any); shape.appendChild(option);
+    }
+    row('Node shape').appendChild(shape); shape.addEventListener('change', () => onChange({shape:shape.value}));
+    const width = document.createElement('select'); width.setAttribute('aria-label', t('Border thickness'));
+    for (const value of [1,2,3,4]) { const option = document.createElement('option'); option.value = String(value); option.textContent = value + ' px'; width.appendChild(option); }
+    row('Border thickness').appendChild(width); width.addEventListener('change', () => onChange({borderWidth:Number(width.value)}));
+    const colors: Record<string, {picker: HTMLInputElement; reset: HTMLButtonElement}> = {};
+    for (const [key,label,resetLabel] of [['borderColor','Border color','Follow theme'],['backgroundColor','Fill color','Transparent']]) {
+        const field = row(label), picker = document.createElement('input'); picker.type = 'color'; picker.setAttribute('aria-label',t(label as any));
+        picker.addEventListener('change', () => onChange({[key]:picker.value})); field.appendChild(picker);
+        const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = t(resetLabel as any);
+        reset.addEventListener('click', () => onChange({[key]:''})); field.appendChild(reset); colors[key] = {picker,reset};
+    }
+    return {element, setValue(value: any, disabled = false) {
+        shape.value = value.shape || 'none'; width.value = String(value.borderWidth || 1);
+        shape.disabled = disabled; width.disabled = disabled;
+        for (const key of Object.keys(colors)) { const {picker,reset} = colors[key]; picker.value = value[key] || (key === 'borderColor' ? '#333333' : '#ffffff'); picker.disabled = disabled; reset.disabled = disabled; reset.setAttribute('aria-pressed', String(!value[key])); }
+    }};
+}
+
 /** Native controls keep this editor usable in both desktop and mobile settings. */
 export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
     const section = document.createElement('details'); section.className = 'mm-preset-settings'; host.appendChild(section);
@@ -60,6 +87,9 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
             };
             const name = field(t('Preset name'), 'text', preset.name); name.maxLength = 80;
             const color = renderPresetColorPicker(form, preset.color, () => { updatePreview(); save.textContent = t('Save preset'); });
+            let boxDraft = {shape: preset.shape, borderColor: preset.borderColor, borderWidth: preset.borderWidth, backgroundColor: preset.backgroundColor};
+            const box = renderNodeBoxControls(form, patch => { boxDraft = {...boxDraft, ...patch}; updatePreview(); save.textContent = t('Save preset'); });
+            box.setValue(boxDraft);
             const size = field(t('Preset font size'), 'number', preset.fontSize?.toString() || ''); size.min = '8'; size.max = '72';
             const configuredSize = Number(plugin.settings.fontSize);
             const defaultSize = Number.isFinite(configuredSize) && configuredSize > 0 ? configuredSize : 16;
@@ -75,7 +105,7 @@ export function renderStylePresetSettings(host: HTMLElement, plugin: any) {
             const preview = document.createElement('div'); preview.className = 'mm-node mm-preset-preview'; preview.style.fontSize = defaultSize + 'px';
             const content = document.createElement('div'); content.className = 'mm-node-content'; content.textContent = t('Preset preview'); preview.appendChild(content); form.appendChild(preview);
             const error = document.createElement('p'); error.className = 'mm-preset-error'; error.setAttribute('role', 'alert'); form.appendChild(error);
-            const draft = (): NodeStylePreset => ({...preset, name: name.value.trim(), color: color.value.trim() || undefined,
+            const draft = (): NodeStylePreset => ({...preset, ...boxDraft, name: name.value.trim(), color: color.value.trim() || undefined,
                 fontSize: size.value ? Number(size.value) : undefined, bold: toggles.bold.checked, italic: toggles.italic.checked, underline: toggles.underline.checked, strike: toggles.strike.checked});
             const updatePreview = () => {
                 const value = normalizePresets([{...draft(), name: 'preview'}])[0];

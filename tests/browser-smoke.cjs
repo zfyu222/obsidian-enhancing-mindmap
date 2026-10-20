@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+const names = ['normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -521,7 +521,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             testMap.setSelectedNodes([testMap.root,testMap.summaries.items[0].root]);
             window.beforeStyleUndos=testMap.exec.history.undos.length;
         });
-        const presetSelect=page.locator('.mm-side-panel select');
+        const presetSelect=page.locator('.mm-side-panel select[aria-label="Node style preset"]');
         await presetSelect.selectOption('重点');
         assert.deepEqual(errors,[]);
         assert.equal(await page.evaluate(()=>testMap.exec.history.undos.length),await page.evaluate(()=>beforeStyleUndos+1));
@@ -576,11 +576,19 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await settings.getByRole('button',{name:'Follow theme',exact:true}).getAttribute('aria-pressed'),'false');
         await settings.getByLabel('Italic',{exact:true}).uncheck();
         await settings.getByLabel('Underline',{exact:true}).check();
+        await settings.locator('.mm-box-controls summary').click();
+        await settings.getByRole('combobox',{name:'Node shape',exact:true}).selectOption('rounded');
+        await settings.getByRole('combobox',{name:'Border thickness',exact:true}).selectOption('2');
+        assert.equal(await settings.locator('.mm-preset-preview .mm-node-content').evaluate(el=>getComputedStyle(el).borderTopWidth),'2px');
+        await settings.locator('.mm-box-controls summary').click();
+
         await settings.getByRole('button',{name:'Save preset',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.stylePreset),'重点','Existing notes keep the original name alias');
         assert.equal(await presetSelect.inputValue(),'结论');
         assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).color),'rgb(34, 170, 136)');
         assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).fontStyle),'normal');
+        assert.equal(await page.evaluate(()=>JSON.parse(savedPresetData).nodeStylePresets[0].shape),'rounded');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).borderTopWidth),'2px');
         assert.match(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).textDecorationLine),/underline/);
         assert.ok(await page.evaluate(()=>JSON.parse(savedPresetData).nodeStylePresets[0].aliases.includes('重点')));
         await page.screenshot({path:path.join(screenshotDir,'style-color-picker.png')});
@@ -683,6 +691,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
+        assert.equal(await inspector.locator('.mm-box-controls').isVisible(),false);
         await sidebarSize.fill('18');
         await page.evaluate(()=>{testMap.root.contentEl.focus();selectEditorOffsets(testMap.root.contentEl,0,6);});
         await page.waitForTimeout(550);
@@ -718,6 +727,23 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Node style');
         assert.equal(await presetSelect.isVisible(),true);
         await page.screenshot({path:path.join(screenshotDir,'sidebar-node-style.png')});
+
+        await inspector.locator('.mm-box-controls summary').click();
+        await inspector.getByRole('combobox',{name:'Node shape',exact:true}).selectOption('pill');
+        await inspector.getByRole('combobox',{name:'Border thickness',exact:true}).selectOption('3');
+        await inspector.getByLabel('Border color',{exact:true}).evaluate(el=>{el.value='#123456';el.dispatchEvent(new Event('change',{bubbles:true}));});
+        await inspector.getByLabel('Fill color',{exact:true}).evaluate(el=>{el.value='#eeeeee';el.dispatchEvent(new Event('change',{bubbles:true}));});
+        const boxCss=await page.evaluate(()=>{const css=getComputedStyle(testMap.root.contentEl);return {width:css.borderTopWidth,radius:css.borderTopLeftRadius,fill:css.backgroundColor};});
+        assert.deepEqual(boxCss,{width:'3px',radius:'999px',fill:'rgb(238, 238, 238)'});
+        await page.screenshot({path:path.join(screenshotDir,'basic-node-border.png')});
+        await page.evaluate(()=>testMap.undo());
+        assert.notEqual(await page.evaluate(()=>testMap.root.data.nodeStyle.backgroundColor),'#eeeeee');
+        await page.evaluate(()=>testMap.redo());
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.backgroundColor),'#eeeeee');
+        await inspector.getByRole('button',{name:'Transparent',exact:true}).click();
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).backgroundColor),'rgba(0, 0, 0, 0)');
+        await inspector.getByRole('combobox',{name:'Node shape',exact:true}).selectOption('none');
+        assert.equal(await page.evaluate(()=>getComputedStyle(testMap.root.contentEl).borderTopWidth),'0px');
         const beforeDestroySize=await page.evaluate(()=>testMap.root.data.nodeStyle?.fontSize);
         await sidebarSize.fill('31');
         await page.evaluate(()=>{stylePanel.destroy();testMap.view.panel=null;});
