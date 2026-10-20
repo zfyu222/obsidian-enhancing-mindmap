@@ -41,6 +41,7 @@ interface BOX {
 
 export class INodeData implements INode{
     summaryMember?: boolean;
+    relationMember?: boolean;
     stylePreset?: string;
     nodeStyle?: any;
     id:string;

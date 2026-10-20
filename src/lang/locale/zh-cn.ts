@@ -1,6 +1,13 @@
 // 简体中文
 
 export default {
+    "Add relation line": "添加关系线",
+    "Delete relation line": "删除关系线",
+    "Relation line": "关系线",
+    "Click the target node; click blank space or Escape to cancel": "请点击目标节点；点击空白或按 Esc 取消",
+    "Relation already exists": "这两个节点之间已有同向关系线",
+    "Invalid relation data preserved": "关系线数据异常，已保留原文，未加载或修改关系线",
+
     "Inherit default text style": "跟随默认文字样式",
 
     "Default node style": "默认节点样式",

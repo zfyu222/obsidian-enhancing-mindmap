@@ -1,6 +1,13 @@
 // English
 
 export default {
+    "Add relation line": "Add relation line",
+    "Delete relation line": "Delete relation line",
+    "Relation line": "Relation line",
+    "Click the target node; click blank space or Escape to cancel": "Click the target node; click blank space or Escape to cancel",
+    "Relation already exists": "Relation already exists",
+    "Invalid relation data preserved": "Invalid relation data preserved",
+
     "Inherit default text style": "Inherit default text style",
 
     "Default node style": "Default node style",

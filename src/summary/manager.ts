@@ -80,10 +80,11 @@ export default class SummaryManager {
     }
     snapshot() {
         const nodes: any[] = []; this.map.traverseDF((node: any) => nodes.push({ node, id: node.getId(), marker: node.data.summaryMember }));
-        return { items: this.items.map(item => ({ ...item, memberIds: item.memberIds.slice() })), nodes,
+        return { relations: this.map.relations?.snapshot(), items: this.items.map(item => ({ ...item, memberIds: item.memberIds.slice() })), nodes,
             positions: new Map(this.items.map(item => [item.id, item.memberIds.map((id: string) => { const n = this.map.getNodeById(id); return { id, parent: n?.parent, index: n?.parent?.children.indexOf(n) }; })])) };
     }
     restore(snapshot: any) {
+        if(snapshot.relations)this.map.relations?.restore(snapshot.relations);
         this.items = snapshot.items.map((item: any) => ({ ...item, memberIds: item.memberIds.slice() }));
         this.map.traverseDF((n: any) => { delete n.data.summaryMember; });
         snapshot.nodes.forEach(({ id, marker }: any) => { const node = this.map.getNodeById(id); if (node) { if (marker) node.data.summaryMember = marker; else delete node.data.summaryMember; } });
@@ -116,6 +117,7 @@ export default class SummaryManager {
             const ids = new Set(this.items.reduce((ids: string[], item: any) => ids.concat(item.memberIds), []));
             nodes.forEach(node => { if (ids.has(node.getId())) node.data.summaryMember = true; else delete node.data.summaryMember; });
         }
+        this.map.relations?.reconcile(command);
     }
     validation() { return validateSummary(this.map.getSelectedRoots(), this.map.root); }
     create() {

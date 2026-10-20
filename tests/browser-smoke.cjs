@@ -14,7 +14,7 @@ function visit(node) {
     ts.forEachChild(node, visit);
 }
 visit(source);
-const names = ['renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+const names = ['validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -31,7 +31,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             ${code}
             const cmd = { AddNode, ChangeNodeText, RemoveNodes, MoveNodes, PasteNode };
             const t = text => text;
-            const obsidian = { MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
+            const obsidian = { Notice: class { constructor(message) { window.lastNotice = message; } }, MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
             const MindMapView = class {};
             const ProdNode = ${Array.from(definitions.values()).find(text => text.includes('select(preserveSelection = false)'))};
             class Node {
@@ -85,7 +85,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
+            Object.assign(window,{RelationManager,extractRelations,relationsMarkdown,relationCurve,Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -856,6 +856,61 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await defaults.getByLabel('Font size',{exact:true}).inputValue(),'');
         assert.equal(await defaults.getByLabel('Bold',{exact:true}).isChecked(),false);
         console.log('Default node styles: preview, persistence, global fallback, explicit override, undo inheritance, renderer, failed save and reset passed.');
+
+        // Actual release relation manager, toolbar and DOM events.
+        await page.setViewportSize({width:1600,height:900});
+        await page.evaluate(()=>{
+            document.querySelector('#default-style-settings')?.remove();
+            testMap.finishEditingForHistory();testMap.relations=new RelationManager(testMap);
+            const previous=testMap.refresh.bind(testMap);testMap.refresh=()=>{previous();testMap.relations.render();};
+            testMap.containerEL.scrollLeft=0;testMap.containerEL.scrollTop=0;
+            const a=testMap.root.children[0],b=testMap.root.children[1];window.relationEndpoints=[a,b];
+            a.setPosition(200,110);b.setPosition(560,310);testMap.setSelectedNodes([a,b]);
+        });
+        const addRelation=page.getByRole('button',{name:'Add relation line',exact:true});
+        const removeRelation=page.getByRole('button',{name:'Delete relation line',exact:true});
+        await addRelation.click();
+        assert.equal(await page.locator('.mm-relation').count(),1);
+        assert.equal(await page.locator('.mm-relation-arrow').count(),1);
+        const initialRelationPath=await page.locator('.mm-relation-line').getAttribute('d');
+        await page.evaluate(()=>{relationEndpoints[1].setPosition(670,380);testMap.relations.render();});
+        assert.notEqual(await page.locator('.mm-relation-line').getAttribute('d'),initialRelationPath);
+        await page.screenshot({path:path.join(screenshotDir,'node-relation-line.png')});
+        await page.evaluate(()=>{relationEndpoints[1].hide();testMap.relations.render();});
+        assert.equal(await page.locator('.mm-relation').count(),0);
+        await page.evaluate(()=>{relationEndpoints[1].show();testMap.relations.render();});
+        assert.equal(await page.locator('.mm-relation').count(),1);
+        await page.evaluate(()=>{testMap.root.collapse();testMap.relations.render();});
+        assert.equal(await page.locator('.mm-relation').count(),0);
+        await page.evaluate(()=>{testMap.root.expand();testMap.relations.render();});
+        assert.equal(await page.locator('.mm-relation').count(),1);
+        const hit=page.locator('.mm-relation-hit');
+        const point=await hit.evaluate(el=>{const p=el.getPointAtLength(el.getTotalLength()/2);const q=new DOMPoint(p.x,p.y).matrixTransform(el.getScreenCTM());return{x:q.x,y:q.y};});
+        await page.mouse.click(point.x,point.y);
+        assert.equal(await page.locator('.mm-relation.is-selected').count(),1);
+        await removeRelation.click();assert.equal(await page.locator('.mm-relation').count(),0);
+        await page.keyboard.press('Control+z');assert.equal(await page.locator('.mm-relation').count(),1);
+        await page.keyboard.press('Control+y');assert.equal(await page.locator('.mm-relation').count(),0);
+        await page.evaluate(()=>testMap.setSelectedNodes([relationEndpoints[0]]));
+        await addRelation.click();assert.equal(await addRelation.getAttribute('aria-pressed'),'true');
+        await page.locator('[data-id="'+await page.evaluate(()=>relationEndpoints[1].getId())+'"] .mm-node-content').click();
+        assert.equal(await page.locator('.mm-relation').count(),1);
+        assert.equal(await addRelation.getAttribute('aria-pressed'),'false');
+        await page.evaluate(()=>testMap.setSelectedNodes([relationEndpoints[0]]));
+        await addRelation.click();await page.keyboard.press('Escape');
+        assert.equal(await addRelation.getAttribute('aria-pressed'),'false');
+        await addRelation.click();await page.evaluate(()=>testMap.appEl.click());
+        assert.equal(await addRelation.getAttribute('aria-pressed'),'false');
+        const persistedLinks=await page.evaluate(()=>extractRelations(testMap.getMarkdown()).entries);
+        await page.evaluate(links=>{testMap.relations.clear();testMap.relations.load(links);},persistedLinks);
+        assert.equal(await page.locator('.mm-relation').count(),1);
+        const nodeCountBeforeLineKey=await page.evaluate(()=>{testMap.setSelectedNodes([relationEndpoints[0]]);return testMap.root.children.length;});
+        await page.locator('.mm-relation-hit').focus();await page.keyboard.press('Enter');
+        assert.equal(await page.evaluate(()=>testMap.root.children.length),nodeCountBeforeLineKey);
+        await page.keyboard.press('Delete');
+        assert.equal(await page.locator('.mm-relation').count(),0);
+        await page.keyboard.press('Control+z');assert.equal(await page.locator('.mm-relation').count(),1);
+        console.log('Relation lines: actual toolbar, sequential node clicks, arrow, movement, folding, native hit selection, deletion, undo/redo, cancellation and saved metadata reload passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

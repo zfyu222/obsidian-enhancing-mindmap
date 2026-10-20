@@ -412,3 +412,10 @@
 
 .mm-default-style { margin-bottom: 16px; border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 12px; }
 .mm-default-style > button { margin-right: 8px; }
+
+.mm-relation-line { fill: none; stroke: var(--text-muted, #888); stroke-width: 1.8; stroke-dasharray: 6 4; pointer-events: none; }
+.mm-relation-arrow { fill: var(--text-muted, #888); pointer-events: none; }
+.mm-relation-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.mm-relation.is-selected .mm-relation-line { stroke: var(--interactive-accent, #5294e2); stroke-width: 2.5; }
+.mm-relation.is-selected .mm-relation-arrow { fill: var(--interactive-accent, #5294e2); }
+.mm-toolbar button[aria-pressed=true] { background: var(--interactive-accent); color: var(--text-on-accent); }

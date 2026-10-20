@@ -131,6 +131,8 @@ export default class MindMapPlugin extends Plugin {
       }
     });
 
+    this.addCommand({ id: 'add-relation-line', name: t('Add relation line'), callback: () => {this.app.workspace.getActiveViewOfType(MindMapView)?.mindmap?.relations?.begin();} });
+    this.addCommand({ id: 'delete-relation-line', name: t('Delete relation line'), callback: () => {this.app.workspace.getActiveViewOfType(MindMapView)?.mindmap?.relations?.remove();} });
     this.addCommand({ id: 'add-summary', name: t('Add summary'), callback: () => {
       this.app.workspace.getActiveViewOfType(MindMapView)?.mindmap?.summaries?.create();
     }});

@@ -14,6 +14,7 @@ export default class MindMapToolbar {
       this.buttons.summary.disabled = !validation || !!validation.error || !!map.summaries?.preserved;
       this.buttons.summary.title = (validation?.error ? t(validation.error as any) : t('Add summary'));
     }
+    if(this.buttons.relation){const count=ready?map.getSelectedNodes().length:0;this.buttons.relation.disabled=!map.relations || !!map.relations.preserved || (!map.relations.pending && count!==1 && count!==2);this.buttons.relation.setAttribute('aria-pressed',String(!!map.relations?.pending));this.buttons.removeRelation.disabled=!map.relations?.selected;}
     this.buttons.child.disabled = !ready;
     this.buttons.sibling.disabled = !map.selectNode?.parent;
     this.buttons.delete.disabled = !roots.some(node => !node.data.isRoot || node.data.summaryRoot);
@@ -40,6 +41,8 @@ export default class MindMapToolbar {
     });
     // Inline SVG keeps icons available on older Obsidian versions as well.
     const icons: Record<string, string> = {
+      relation: '<path d="M3 17C8 2 16 22 21 7m-5 0h5v5" stroke-dasharray="3 3"/>',
+      removeRelation: '<path d="M3 17C8 2 16 22 21 7m-5 0h5v5M4 3l5 5m0-5L4 8"/>',
       summary: '<path d="M6 3q5 0 5 5v8q0 5-5 5m5-9h4"/><rect x="15" y="8" width="6" height="8" rx="1"/>',
       child: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M7 9v8h5m5-4v8m-4-4h8"/>',
       sibling: '<rect x="3" y="3" width="8" height="6" rx="1"/><path d="M3 13h8m-4-4v12m10-12v8m-4-4h8"/>',
@@ -72,6 +75,8 @@ export default class MindMapToolbar {
       this.buttons[id] = el;
       this.element.appendChild(el);
     };
+    button('relation', t('Add relation line'), t('Add relation line'), () => map.relations?.begin());
+    button('removeRelation', t('Delete relation line'), t('Delete relation line'), () => map.relations?.remove());
     button('summary', t('Add summary'), t('Add summary'), () => map.summaries?.create());
     button('child', t('Add child'), `${t('Add child')} (Tab)`, () => {
       map.finishEditingForHistory();

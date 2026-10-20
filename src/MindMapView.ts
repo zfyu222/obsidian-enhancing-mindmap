@@ -1,4 +1,5 @@
 import MindMapPanel from './MindMapPanel';
+import { extractRelations } from './relations/model';
 import {
   HoverParent,
   FileManager,
@@ -375,7 +376,8 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.data = data;
 
     var mdText = this.getMdText(this.data);
-    const summaryDocument = extractSummaries(mdText);
+    const relationDocument = extractRelations(mdText);
+    const summaryDocument = extractSummaries(relationDocument.main);
     var mindData = this.mdToData(summaryDocument.main);
     mindData.isRoot = true;
 
@@ -419,6 +421,7 @@ export class MindMapView extends TextFileView implements HoverParent {
         }
         this.mindmap.init();
         this.mindmap.summaries.load(summaryDocument.entries, summaryDocument.preserved, summaryDocument.raw);
+        this.mindmap.relations.load(relationDocument.entries, relationDocument.preserved, relationDocument.raw);
         this.mindmap.refresh();
         this.mindmap.view = this;
         this.toolbar?.update();
@@ -433,6 +436,7 @@ export class MindMapView extends TextFileView implements HoverParent {
       this.mindmap.path = view?.file.path;
       this.mindmap.init();
       this.mindmap.summaries.load(summaryDocument.entries, summaryDocument.preserved, summaryDocument.raw);
+        this.mindmap.relations.load(relationDocument.entries, relationDocument.preserved, relationDocument.raw);
       this.mindmap.refresh();
       this.mindmap.view = this;
       this.toolbar?.update();
