@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
-function load(file,deps={},globals={}){const module={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module,exports:module.exports,require:id=>deps[id]||{},console,setTimeout,clearTimeout,...globals});return module.exports;}
+function load(file,deps={},globals={}){const module={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module,exports:module.exports,require:id=>id.endsWith('/grafts/model')?load('src/grafts/model.ts'):deps[id]||{},console,setTimeout,clearTimeout,...globals});return module.exports;}
 const constants=load('src/constants.ts'),styles=load('src/nodeStyles.ts');
 const markdown=load('src/summary/markdown.ts',{'../nodeStyles':styles});
 const relations=load('src/relations/model.ts');

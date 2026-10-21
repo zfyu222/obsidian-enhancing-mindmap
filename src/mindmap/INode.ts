@@ -42,6 +42,7 @@ interface BOX {
 export class INodeData implements INode{
     summaryMember?: boolean;
     relationMember?: boolean;
+    graftMember?: boolean;
     stylePreset?: string;
     nodeStyle?: any;
     id:string;
@@ -55,6 +56,10 @@ export class INodeData implements INode{
 }
 
 export default class Node {
+    virtualSource?: Node;
+    virtualGraft?: string;
+    virtualRoot?: boolean;
+    virtualPreview?: boolean;
     containEl:HTMLElement;
     contentEl:HTMLElement;
     box:BOX = {

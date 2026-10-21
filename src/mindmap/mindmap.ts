@@ -3,6 +3,7 @@ import StyleNodes, { ChangeNodeStyle } from './StyleNodes';
 import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
 import RelationManager from '../relations/manager'
+import GraftManager from '../grafts/manager'
 import TextFormatMenu from './text-format'
 import Layout from './Layout'
 import { Notice, Platform } from 'obsidian'
@@ -90,6 +91,7 @@ export default class MindMap {
     isFocused = true;
     summaries?: SummaryManager;
     relations?: RelationManager;
+    grafts?: GraftManager;
     summaryTransaction = false;
     textFormatMenu?: TextFormatMenu;
 
@@ -149,6 +151,7 @@ export default class MindMap {
         this.edgeGroup = this.draw.group();
         this.summaries = new SummaryManager(this);
         this.relations = new RelationManager(this);
+        this.grafts = new GraftManager(this);
 
         this.appClickFn = this.appClickFn.bind(this);
         this.appDragstart = this.appDragstart.bind(this);
@@ -289,6 +292,7 @@ export default class MindMap {
     traverseAll(callback: Function) {
         this.traverseDF(callback, this.root, true);
         this.summaries?.all((node: INode) => callback(node));
+        this.grafts?.all((node: INode) => callback(node));
     }
 
     getNodeById(id: string) {
@@ -469,6 +473,7 @@ export default class MindMap {
             e.stopPropagation();
             e.stopImmediatePropagation();
         };
+        if (key === 'escape' && this.grafts?.pending) { consume(); this.grafts.cancel(); return; }
         const relationHit=target?.closest?.('.mm-relation-hit');
         if(relationHit && (key==='enter'||key===' '))return; // The path's own keyboard handler selects the line.
         if(relationHit && (key==='delete'||key==='backspace')){
@@ -1572,6 +1577,14 @@ export default class MindMap {
         if (this.isNodeEditorTarget(evt.target)) return;
         if (Date.now() < this._suppressClickUntil) { this._suppressClickUntil = 0; evt.preventDefault(); return; }
         var targetEl = evt.target as HTMLElement;
+        if (this.grafts?.pending && targetEl && !targetEl.closest('a, .mm-node-bar, .mm-node-menu')) {
+            const element = targetEl.closest('.mm-node');
+            if (element) {
+                const target = this.grafts.original(this.getNodeById(element.getAttribute('data-id')));
+                evt.preventDefault(); evt.stopPropagation(); this.grafts.create(this.grafts.pending, target.getId()); return;
+            }
+            this.grafts.cancel();
+        }
         if(this.relations?.pending && targetEl && !targetEl.closest('a, .mm-node-bar, .mm-node-menu')) {
             const element=targetEl.closest('.mm-node');
             if(element){evt.preventDefault();evt.stopPropagation();this.relations.create(this.relations.pending,element.getAttribute('data-id'));return;}
@@ -1657,6 +1670,7 @@ export default class MindMap {
         const node = this.getNodeById(element.getAttribute('data-id'));
         if (!this.getSelectedNodes().includes(node)) this.setSelectedNodes([node], node);
         this._dragNodes = this.getSelectedRoots();
+        if (this._dragNodes.some(node => node.virtualSource)) { evt.preventDefault(); new Notice(t('Move virtual branch structure at the source')); return; }
         if (!this._dragNodes.length || this._dragNodes.some(n => !n.parent || n.data.isEdit)) { evt.preventDefault(); return; }
         this._dragNode = node;
         this.drag = true;
@@ -2094,6 +2108,7 @@ export default class MindMap {
     }
 
     clear() {
+        this.grafts?.clear();
         this.textFormatMenu?.close();
         this.relations?.clear();
         this.summaries?.clear();
@@ -2188,6 +2203,7 @@ export default class MindMap {
 
     // Move all the current node's siblings as this node's children
     moveAllSiblingsAsChildren(node: INode) {
+        node = this.grafts?.original(node) || node;
         var sibs = node.getSiblings();
         sibs.forEach((sib) => {
             this._moveAsChild(sib, node);
@@ -2199,6 +2215,7 @@ export default class MindMap {
 
     // Move the current node's next siblings as this node's children
     moveNextSiblingsAsChildren(node: INode) {
+        node = this.grafts?.original(node) || node;
         var sibs = node.getAllNextSiblings();
         sibs.forEach((sib) => {
             this._moveAsChild(sib, node);
@@ -2210,6 +2227,7 @@ export default class MindMap {
 
     // Join the current node with the following node
     joinWithFollowingNode(node: INode, in_asCitation: Boolean) {
+        node = this.grafts?.original(node) || node;
         let joinedNode = node.getNextSibling();
 
         // Set node's text, except for the starting emoticon and finishing link (if any)
@@ -2252,6 +2270,7 @@ export default class MindMap {
 
         // Delete joined node
         this.removeNode(joinedNode);
+        this.grafts?.reconcile();
 
         this.clearSelectNode();
         this.refresh();
@@ -2261,6 +2280,12 @@ export default class MindMap {
 
     //execute cmd , store history
     execute(name: string, data?: any) {
+        if (this.grafts && data) {
+            if (name === 'removeNodes' && this.grafts.removeNodes(data.nodes)) return;
+            data = { ...data };
+            for (const key of ['node', 'parent', 'dropNode', 'oldParent', 'newParent']) if (data[key]) data[key] = this.grafts.original(data[key]);
+            if (data.nodes) data.nodes = Array.from(new Set(data.nodes.map((node: INode) => this.grafts.original(node))));
+        }
         const result = this.exec.execute(name, data);
         this.emit('toolbarChange');
         return result;
@@ -2268,7 +2293,7 @@ export default class MindMap {
     applyStylePreset(name?: string) {
         if (this.isComposing || (name && !findPreset(this.setting.nodeStylePresets || [], name))) return;
         this.finishEditingForHistory();
-        const nodes = this.getSelectedNodes();
+        const nodes = Array.from(new Set(this.getSelectedNodes().map(node => this.grafts?.original(node) || node)));
         if (!nodes.length) return;
         this.exec.history.execute(new StyleNodes(this, nodes, name));
         this.emit('toolbarChange');
@@ -2276,7 +2301,7 @@ export default class MindMap {
     applyLocalNodeStyle(patch?: any) {
         if (this.isComposing) return;
         this.finishEditingForHistory();
-        const nodes = this.getSelectedNodes();
+        const nodes = Array.from(new Set(this.getSelectedNodes().map(node => this.grafts?.original(node) || node)));
         if (nodes.length) this.exec.history.execute(new ChangeNodeStyle(this, nodes, patch));
         this.emit('toolbarChange');
     }
@@ -2373,8 +2398,8 @@ export default class MindMap {
 
     refresh() {
         if (this.summaryTransaction) return;
-        this.layout();
-        this.summaries?.layout();
+        const layout = () => { this.layout(); this.summaries?.layout(); };
+        if (this.grafts) this.grafts.withTrees(layout); else layout();
         this.relations?.render();
     }
 
@@ -2576,7 +2601,7 @@ export default class MindMap {
         this.traverseDF((node: INode) => {
             const text: string = node.data.text.trim();
             const parts = text.split('\n');
-            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + ((node.data.summaryMember || node.data.relationMember) ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
+            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + ((node.data.summaryMember || node.data.relationMember || node.data.graftMember) ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
             if (node.getLevel() < level) {
                 const block = /^(```|~~~|\|)/.test(text);
                 lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);
@@ -2594,7 +2619,7 @@ export default class MindMap {
                 }
             }
         }, this.root, true);
-        return [lines.join('\n').trim(), this.relations?.markdown(), this.summaries?.markdown()].filter(Boolean).join('\n\n');
+        return [lines.join('\n').trim(), this.relations?.markdown(), this.grafts?.markdown(), this.summaries?.markdown()].filter(Boolean).join('\n\n');
     }
     scale(num: number) {
         if (num < 20) {
@@ -2631,7 +2656,7 @@ export default class MindMap {
         }, 600);
     }
 
-    copyForest(nodes: INode[]): string { return serializeForest(nodes, this.summaries?.data(), this.relations?.snapshot()); }
+    copyForest(nodes: INode[]): string { return serializeForest(nodes.map(node => this.grafts?.original(node) || node), this.summaries?.data(), this.relations?.snapshot(), this.grafts?.snapshot()); }
 
     copyNode(node?: INode): string {
         return this.copyForest(node ? [node] : this.getSelectedRoots());

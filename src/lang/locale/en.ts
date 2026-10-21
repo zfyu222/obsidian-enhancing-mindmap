@@ -1,6 +1,13 @@
 // English
 
 export default {
+    'Graft virtual branch': 'Graft virtual branch',
+    'Detach virtual branch': 'Detach virtual branch',
+    'Virtual node: editing changes the source': 'Virtual node: editing changes the source',
+    'Click the node to graft under; Escape cancels': 'Click the node to graft under; Escape cancels',
+    'Virtual branch would be cyclic, duplicated or too large': 'Virtual branch would be cyclic, duplicated or too large',
+    'Invalid virtual branch data preserved': 'Invalid virtual branch data preserved',
+    'Move virtual branch structure at the source': 'Move virtual branch structure at the source',
     "Add relation line": "Add relation line",
     "Delete relation line": "Delete relation line",
     "Relation line": "Relation line",

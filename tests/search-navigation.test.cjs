@@ -43,6 +43,13 @@ test('new files and disposal cancel pending navigation; current viewport geometr
  navigation.centerSearchNode({containerEL:viewport},{containEl:{getBoundingClientRect:()=>({left:900,top:700,width:200,height:80})}});
  assert.equal(viewport.scrollLeft,609);assert.equal(viewport.scrollTop,408);view.searchNavigation.clear();
 });
+test('virtual branch metadata is excluded from searches and projected copies do not make a unique source ambiguous',()=>{
+ const original='# Root\n- Needle\n- Other\n',current='# Root\n- Inserted\n- Needle\n- Other\n\n<!-- mm:grafts {"version":1,"links":[{"id":"g","source":"a","target":"b"}]} -->';
+ const {view,map}=fixture(current),source=map.root.children[1],walk=map.traverseAll;
+ map.traverseAll=callback=>{walk(callback);callback({data:{text:'Needle'},virtualSource:source,getId:()=> 'virtual:g:a'});};
+ assert.equal(navigation.resolveSearchNode(view,navigation.searchRequest(state(original,'Needle'))),source);
+ assert.equal(navigation.resolveSearchNode(view,navigation.searchRequest(state(current,'mm:grafts'))),null);
+});
 test('view receives ephemeral state and the existing leaf routing preserves the search payload, even from markdown mode',()=>{
  const f=fixture(raw);View.prototype.setEphemeralState.call(f.view,state(raw,'Other'));assert.equal(f.map.selected[0],f.map.root.children[1]);f.view.searchNavigation.clear();
  let wrappers;const Leaf=class{};const Plugin=load('src/main.ts',{obsidian:{Plugin:class{},WorkspaceLeaf:Leaf},'./constants':constants,'./search/navigation':navigation,'./MindMapView':{mindmapViewType:'mindmapView'},'monkey-around':{around:(p,w)=>{wrappers=w;return()=>{};}}}).default;
@@ -55,7 +62,7 @@ test('view receives ephemeral state and the existing leaf routing preserves the 
 
 test('rapid file renders discard obsolete initialization and closing a view cancels queued work',async()=>{
  const maps=[],flushed=[];
- class FakeMap{constructor(data){this.data=data;this.summaries={load(){}};this.relations={load(){}};maps.push(this);}init(){this.inits=(this.inits||0)+1;this.root={};}refresh(){}clear(){this.cleared=true;}}
+ class FakeMap{constructor(data){this.data=data;this.summaries={load(){}};this.relations={load(){}};this.grafts={load(){}};maps.push(this);}init(){this.inits=(this.inits||0)+1;this.root={};}refresh(){}clear(){this.cleared=true;}}
  class Control{update(){}destroy(){}}
  const el=()=>({innerHTML:'',classList:{add(){}},appendChild(){}});
  const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');

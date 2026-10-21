@@ -1,0 +1,168 @@
+import Node from '../mindmap/INode';
+import { RemoveNodes } from '../mindmap/Cmds';
+import { applyNodeStyle } from '../nodeStyles';
+import { Notice } from 'obsidian';
+import { uuid } from '../MindMapView';
+import { t } from '../lang/helpers';
+import { GraftData, graftsMarkdown, validGraftGraph } from './model';
+
+/** References are durable; projected nodes and their visual parents are runtime only. */
+export default class GraftManager {
+    items: GraftData[] = []; preserved = ''; pending = '';
+    nodes = new Map<string, Node>(); roots: { link: GraftData; node: Node; target: Node }[] = [];
+    attached = false;
+    constructor(public map: any) { map.appEl.addEventListener?.('input', this.preview); }
+    preview = () => {
+        const editor = this.map.editNode;
+        if (!editor?.data.isEdit) return;
+        const source = this.original(editor);
+        const others = [source, ...Array.from(this.nodes.values()).filter(node => node.virtualSource === source)];
+        others.forEach(node => {
+            if (node === editor) return;
+            node.contentEl.textContent = editor.contentEl.innerText;
+            node.virtualPreview = true; node.refreshBox();
+        });
+    };
+    original(node: any): any { return node?.virtualSource || node; }
+    originals(): any[] {
+        const nodes: any[] = [];
+        this.map.traverseDF((node: any) => nodes.push(node));
+        this.map.summaries?.all((node: any) => nodes.push(node));
+        return nodes;
+    }
+    snapshot() { return this.items.map(item => ({ ...item })); }
+    restore(items: GraftData[]) { this.items = items.map(item => ({ ...item })); this.pending = ''; this.markers(); }
+    load(entries: GraftData[], preserved = '', original = '') {
+        this.items = entries.map(item => ({ ...item })); this.preserved = preserved;
+        if (!validGraftGraph(this.originals(), this.items)) {
+            this.preserved = original || graftsMarkdown(entries); this.items = [];
+        }
+        if (this.preserved) new Notice(t('Invalid virtual branch data preserved'));
+        this.markers();
+    }
+    markers() {
+        const ids = new Set<string>(); this.items.forEach(item => { ids.add(item.source); ids.add(item.target); });
+        this.originals().forEach(node => {
+            if (this.preserved || ids.has(node.getId())) node.data.graftMember = true;
+            else delete node.data.graftMember;
+        });
+    }
+    reconcile(command?: any) {
+        if (this.preserved) return;
+        if (command?.name === 'pasteNode' && command.data?.grafts) this.items.push(...command.data.grafts);
+        const ids = new Set(this.originals().map(node => node.getId()));
+        this.items = this.items.filter(item => ids.has(item.source) && ids.has(item.target));
+        if (this.pending && !ids.has(this.pending)) this.pending = '';
+        this.markers();
+    }
+    canMove(nodes: any[], destination: any) {
+        return !this.items.length || validGraftGraph(this.originals(), this.items, nodes, destination);
+    }
+    cancel() { this.pending = ''; this.map.emit('toolbarChange'); }
+    begin() {
+        if (this.preserved || this.map.isComposing) return;
+        if (this.pending) { this.cancel(); return; }
+        this.map.finishEditingForHistory();
+        const nodes = this.map.getSelectedNodes();
+        if (nodes.length !== 1) return;
+        this.map.relations?.cancel();
+        this.pending = this.original(nodes[0]).getId();
+        this.map.emit('toolbarChange'); new Notice(t('Click the node to graft under; Escape cancels'));
+    }
+    create(source: string, target: string) {
+        this.pending = '';
+        const nodes = this.originals();
+        const item = { id: uuid(), source, target };
+        if (this.preserved || this.map.isComposing || this.items.length >= 1000 || this.items.some(link => link.source === source && link.target === target) ||
+            !validGraftGraph(nodes, [...this.items, item])) {
+            new Notice(t('Virtual branch would be cyclic, duplicated or too large')); this.map.emit('toolbarChange'); return;
+        }
+        const manager = this;
+        this.map.exec.history.execute({ name: 'addGraft', execute() { manager.items.push(item); return true; },
+            undo() { manager.items = manager.items.filter(link => link.id !== item.id); }, redo() { this.execute(); } } as any);
+    }
+    removeSelected() {
+        this.map.finishEditingForHistory();
+        const ids = new Set<string>(this.map.getSelectedNodes().map((node: Node) => node.virtualGraft).filter(Boolean));
+        this.removeNodes([], ids);
+    }
+    removeNodes(nodes: Node[], ids = new Set(nodes.filter(node => node.virtualRoot).map(node => node.virtualGraft))) {
+        if (!ids.size) return false;
+        const manager = this, remaining = nodes.filter(node => !node.virtualRoot);
+        const command = remaining.length ? new RemoveNodes(Array.from(new Set(remaining.map(node => this.original(node))))) : null;
+        const removed = this.items.filter(item => ids.has(item.id));
+        if (!removed.length) return false;
+        this.map.exec.history.execute({ name: 'removeGrafts', execute() {
+            manager.map.clearSelectNode(); manager.items = manager.items.filter(item => !ids.has(item.id));
+            command?.execute(); return true;
+        }, undo() { command?.undo(); manager.items.push(...removed); }, redo() { this.execute(); } } as any);
+        return true;
+    }
+    markdown() { return this.preserved || graftsMarkdown(this.items); }
+    all(callback: (node: Node) => void) { if (!this.attached) this.nodes.forEach(callback); }
+    sync() {
+        const byId = new Map(this.originals().map(node => [node.getId(), node]));
+        const editor = this.map.editNode?.data.isEdit ? this.map.editNode : null;
+        const editingSource = this.original(editor);
+        byId.forEach(node => {
+            if (node.virtualPreview && node !== editingSource) { node.virtualPreview = false; node.parseText(); }
+        });
+        const used = new Set<string>(); this.roots = [];
+        const build = (source: Node, parent: Node, link: GraftData, path: string, root = false): Node => {
+            const id = `virtual:${path}:${source.getId()}`;
+            let mirror = this.nodes.get(id);
+            if (!mirror) {
+                mirror = new Node({ ...source.data, id, isRoot: false, isEdit: false, children: undefined }, this.map);
+                mirror.containEl.classList.add('mm-virtual-node');
+                mirror.containEl.title = t('Virtual node: editing changes the source');
+                mirror.setPosition(0, 0);
+                this.nodes.set(id, mirror); this.map.contentEL.appendChild(mirror.containEl);
+            }
+            used.add(id); mirror.virtualSource = source; mirror.virtualGraft = link.id; mirror.virtualRoot = root; mirror.parent = parent;
+            if (!mirror.data.isEdit) {
+                const changed = mirror.data.text !== source.data.text || JSON.stringify(mirror.data.nodeStyle) !== JSON.stringify(source.data.nodeStyle) || mirror.data.stylePreset !== source.data.stylePreset;
+                mirror.data.text = source.data.text; mirror.data.nodeStyle = source.data.nodeStyle; mirror.data.stylePreset = source.data.stylePreset;
+                if ((changed || mirror.virtualPreview) && source !== editingSource) {
+                    mirror.virtualPreview = false; mirror.setText(source.data.text);
+                }
+                applyNodeStyle(mirror, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
+            }
+            mirror.isExpand = source.isExpand;
+            mirror.children = source.children.map(child => build(child, mirror!, link, path));
+            this.items.filter(item => item.target === source.getId()).forEach(item => {
+                const nested = byId.get(item.source); if (nested) mirror!.children.push(build(nested, mirror!, link, path + ':' + item.id));
+            });
+            mirror.refreshBox(); mirror.clearCacheData(); return mirror;
+        };
+        const renderable = validGraftGraph(Array.from(byId.values()), this.items);
+        (renderable ? this.items : []).forEach(link => {
+            const source = byId.get(link.source), target = byId.get(link.target);
+            if (source && target) this.roots.push({ link, node: build(source, target, link, link.id, true), target });
+        });
+        const visibility = (node: Node, visible: boolean) => {
+            if (visible) node.show(); else node.hide();
+            node.children.forEach(child => visibility(child, visible && node.isExpand));
+        };
+        this.roots.forEach(({ node, target }) => visibility(node, target.isShow() && target.isExpand));
+        this.nodes.forEach((node, id) => {
+            if (used.has(id)) return;
+            if (this.map.editNode === node) { node.data.isEdit = false; this.map.editNode = null; }
+            if (this.map.selectNode === node) this.map.selectNode = null;
+            this.map.selectedNodes = this.map.selectedNodes.filter((selected: Node) => selected !== node);
+            node.containEl.remove(); this.nodes.delete(id);
+        });
+        this.originals().forEach(node => node.clearCacheData());
+        if (editor) this.preview();
+    }
+    withTrees(action: () => void) {
+        if (this.attached) { action(); return; }
+        this.sync(); this.attached = true;
+        const parents = new Map<Node, Node[]>();
+        this.roots.forEach(({ target, node }) => {
+            if (!parents.has(target)) { parents.set(target, target.children); target.children = target.children.slice(); }
+            target.children.push(node);
+        });
+        try { action(); } finally { parents.forEach((children, node) => node.children = children); this.attached = false; }
+    }
+    clear() { this.map.appEl.removeEventListener?.('input', this.preview); this.nodes.forEach(node => node.containEl.remove()); this.nodes.clear(); this.roots = []; this.items = []; this.pending = ''; }
+}

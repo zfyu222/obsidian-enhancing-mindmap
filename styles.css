@@ -189,6 +189,19 @@
 
 
 /* edit node style */
+.mm-node.mm-virtual-node > .mm-node-content {
+    outline: 1px dashed var(--text-muted, #888);
+    outline-offset: 3px;
+}
+.mm-node.mm-virtual-node::after {
+    content: '↪';
+    position: absolute;
+    right: -13px;
+    top: -10px;
+    font-size: 12px;
+    color: var(--text-muted, #888);
+    pointer-events: none;
+}
 .mm-node.mm-edit-node{
     z-index:50;
 }

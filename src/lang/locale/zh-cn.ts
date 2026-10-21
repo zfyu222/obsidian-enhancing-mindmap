@@ -1,6 +1,13 @@
 // 简体中文
 
 export default {
+  'Graft virtual branch': '嫁接虚拟分支',
+  'Detach virtual branch': '解除虚拟分支',
+  'Virtual node: editing changes the source': '虚拟节点：编辑会同步修改原节点',
+  'Click the node to graft under; Escape cancels': '点击要嫁接到的节点；Esc 取消',
+  'Virtual branch would be cyclic, duplicated or too large': '此嫁接会形成循环、重复引用或超出显示规模',
+  'Invalid virtual branch data preserved': '虚拟分支元数据无效，已保留原始内容',
+  'Move virtual branch structure at the source': '请在原分支拖动调整结构；虚拟分支可解除后重新嫁接',
     "Add relation line": "添加关系线",
     "Delete relation line": "删除关系线",
     "Relation line": "关系线",

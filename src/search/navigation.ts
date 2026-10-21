@@ -1,5 +1,6 @@
 import { extractSummaries } from '../summary/markdown';
 import { extractRelations } from '../relations/model';
+import { extractGrafts } from '../grafts/model';
 
 export function isSearchResultState(state: any) {
     return !!state && typeof state.match?.content === 'string' && Array.isArray(state.match.matches);
@@ -19,12 +20,15 @@ export function sourceNodeAtLine(raw: string, line: number, view: any): any {
     const offset=raw.trimEnd().length-body.length;
     if(offset<0||raw.slice(offset,offset+body.length)!==body)return null;
     const base=raw.slice(0,offset).split('\n').length-1,local=line-base;if(local<0)return null;
-    let fence='';
-    const masked=body.split('\n').map((line:string)=>{
+    let fence='', metadata=false;
+    const masked=body.split('\n').map((line:string,index:number)=>{
         const delimiter=/^\s*(`{3,}|~{3,})/.exec(line);
         if(delimiter){if(!fence)fence=delimiter[1][0];else if(delimiter[1][0]===fence)fence='';}
-        return !fence&&!delimiter&&line.startsWith('<!-- mm:relations ')?'':line;
+        const marker=!fence&&!delimiter&&(line.startsWith('<!-- mm:relations ')||line.startsWith('<!-- mm:grafts '));
+        if(marker&&index===local)metadata=true;
+        return marker?'':line;
     }).join('\n');
+    if(metadata)return null;
     const summaries=extractSummaries(masked),main=view.mdToData(summaries.main,true);
     let found:any=null;
     const visit=(node:any,path:number[])=>{
@@ -68,13 +72,13 @@ export function resolveSearchNode(view:any,request:NonNullable<ReturnType<typeof
     const stable=target.kind==='summary'||target.node.summaryMember||target.node.expanded===false;
     if(stable){const matches:any[]=[];map.traverseAll((node:any)=>{if(node.getId()===target.node.id)matches.push(node);});if(matches.length===1)return matches[0];}
     let node=target.kind==='summary'?map.summaries?.items.find((item:any)=>item.id===target.summaryId)?.root:map.root;
-    const currentBody=extractSummaries(extractRelations(view.getMdText(view.data)).main);
+    const currentBody=extractSummaries(extractRelations(extractGrafts(view.getMdText(view.data)).main).main);
     const currentTree=target.kind==='summary'?currentBody.entries.find(entry=>entry.id===target.summaryId)?.root:view.mdToData(currentBody.main,true);
     if(raw.replace(/\r\n/g,'\n')===view.data.replace(/\r\n/g,'\n')||sameSourceTree(target.kind==='summary'?target.summaryRoot:target.main,currentTree)){
         target.path.forEach((index:number)=>node=node?.children[index]);
         if(node?.data.text.trim()===target.node.text.trim())return node;
     }
-    const matches:any[]=[];map.traverseAll((node:any)=>{if(node.data.text.trim()===target.node.text.trim())matches.push(node);});
+    const matches:any[]=[];map.traverseAll((node:any)=>{if(!node.virtualSource&&node.data.text.trim()===target.node.text.trim())matches.push(node);});
     return matches.length===1?matches[0]:null;
 }
 /** Use screen rectangles so centering honors the current zoom and transform origin. */

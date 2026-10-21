@@ -9,6 +9,11 @@ export default class MindMapToolbar {
     const map = this.map;
     const ready = !!map.root;
     const roots = ready ? map.getSelectedRoots() : [];
+    if (this.buttons.graft) {
+      this.buttons.graft.disabled = !map.grafts || !!map.grafts.preserved || (!map.grafts.pending && map.getSelectedNodes().length !== 1);
+      this.buttons.graft.setAttribute('aria-pressed', String(!!map.grafts?.pending));
+      this.buttons.removeGraft.disabled = !map.getSelectedNodes().some(node => !!node.virtualGraft);
+    }
     if (this.buttons.summary) {
       const validation = ready ? map.summaries?.validation() : null;
       this.buttons.summary.disabled = !validation || !!validation.error || !!map.summaries?.preserved;
@@ -41,6 +46,8 @@ export default class MindMapToolbar {
     });
     // Inline SVG keeps icons available on older Obsidian versions as well.
     const icons: Record<string, string> = {
+      graft: '<rect x="2" y="3" width="7" height="5" rx="1"/><path d="M5 8v10h7M9 5h8v6" stroke-dasharray="3 2"/><rect x="13" y="15" width="8" height="6" rx="1"/>',
+      removeGraft: '<path d="M5 4v14h8M13 8l7-6m-7 0 7 6" stroke-dasharray="3 2"/><rect x="13" y="15" width="8" height="6" rx="1"/>',
       relation: '<path d="M3 17C8 2 16 22 21 7m-5 0h5v5" stroke-dasharray="3 3"/>',
       removeRelation: '<path d="M3 17C8 2 16 22 21 7m-5 0h5v5M4 3l5 5m0-5L4 8"/>',
       summary: '<path d="M6 3q5 0 5 5v8q0 5-5 5m5-9h4"/><rect x="15" y="8" width="6" height="8" rx="1"/>',
@@ -76,6 +83,8 @@ export default class MindMapToolbar {
       this.element.appendChild(el);
     };
     button('relation', t('Add relation line'), t('Add relation line'), () => map.relations?.begin());
+    button('graft', t('Graft virtual branch'), t('Graft virtual branch'), () => map.grafts?.begin());
+    button('removeGraft', t('Detach virtual branch'), t('Detach virtual branch'), () => map.grafts?.removeSelected());
     button('removeRelation', t('Delete relation line'), t('Delete relation line'), () => map.relations?.remove());
     button('summary', t('Add summary'), t('Add summary'), () => map.summaries?.create());
     button('child', t('Add child'), `${t('Add child')} (Tab)`, () => {

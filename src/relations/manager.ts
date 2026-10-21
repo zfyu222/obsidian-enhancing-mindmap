@@ -32,6 +32,7 @@ export default class RelationManager {
     cancel() { this.pending='';this.selected='';this.render();this.map.emit('toolbarChange'); }
     begin() {
         if (this.preserved || this.map.isComposing) return;
+        this.map.grafts?.cancel();
         if(this.pending){this.cancel();return;}
         this.map.finishEditingForHistory(); const nodes=this.map.getSelectedNodes();
         if(nodes.length===2){this.create(nodes[0].getId(),nodes[1].getId());return;}
@@ -40,6 +41,8 @@ export default class RelationManager {
     }
     create(from: string, to: string) {
         this.pending='';
+        from = this.map.grafts?.original(this.map.getNodeById(from))?.getId() || from;
+        to = this.map.grafts?.original(this.map.getNodeById(to))?.getId() || to;
         if (this.preserved || this.map.isComposing || from===to || !this.map.getNodeById(from) || !this.map.getNodeById(to)) {this.map.emit('toolbarChange');return;}
         if(this.items.some(link=>link.from===from&&link.to===to)){new Notice(t('Relation already exists'));this.map.emit('toolbarChange');return;}
         const link={id:uuid(),from,to},manager=this;

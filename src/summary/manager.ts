@@ -13,6 +13,7 @@ export class SummaryTransaction {
             const target = this.command.destination || this.command.newParent || this.command.parent;
             const moving = this.command.entries?.map((entry: any) => entry.node) || [this.command.node];
             if (target && moving.some((node: any) => node?.data.summaryTree !== target.data.summaryTree)) { new Notice(t('Move within the same tree')); return false; }
+            if (target && this.manager.map.grafts && !this.manager.map.grafts.canMove(moving, target)) { new Notice(t('Virtual branch would be cyclic, duplicated or too large')); return false; }
         }
         this.before = this.manager.snapshot();
         return this.run(() => {
@@ -80,7 +81,7 @@ export default class SummaryManager {
     }
     snapshot() {
         const nodes: any[] = []; this.map.traverseDF((node: any) => nodes.push({ node, id: node.getId(), marker: node.data.summaryMember }));
-        return { relations: this.map.relations?.snapshot(), items: this.items.map(item => ({ ...item, memberIds: item.memberIds.slice() })), nodes,
+        return { grafts: this.map.grafts?.snapshot(), relations: this.map.relations?.snapshot(), items: this.items.map(item => ({ ...item, memberIds: item.memberIds.slice() })), nodes,
             positions: new Map(this.items.map(item => [item.id, item.memberIds.map((id: string) => { const n = this.map.getNodeById(id); return { id, parent: n?.parent, index: n?.parent?.children.indexOf(n) }; })])) };
     }
     restore(snapshot: any) {
@@ -88,6 +89,7 @@ export default class SummaryManager {
         this.items = snapshot.items.map((item: any) => ({ ...item, memberIds: item.memberIds.slice() }));
         this.map.traverseDF((n: any) => { delete n.data.summaryMember; });
         snapshot.nodes.forEach(({ id, marker }: any) => { const node = this.map.getNodeById(id); if (node) { if (marker) node.data.summaryMember = marker; else delete node.data.summaryMember; } });
+        if (snapshot.grafts) this.map.grafts?.restore(snapshot.grafts);
     }
     reconcile(before: any, command?: any) {
         const nodes = new Map<string, any>(); this.map.traverseDF((n: any) => nodes.set(n.getId(), n));
@@ -118,8 +120,12 @@ export default class SummaryManager {
             nodes.forEach(node => { if (ids.has(node.getId())) node.data.summaryMember = true; else delete node.data.summaryMember; });
         }
         this.map.relations?.reconcile(command);
+        this.map.grafts?.reconcile(command);
     }
-    validation() { return validateSummary(this.map.getSelectedRoots(), this.map.root); }
+    validation() {
+        const selected = this.map.getSelectedRoots().map((node: any) => this.map.grafts?.original(node) || node);
+        return validateSummary(Array.from(new Set(selected)), this.map.root);
+    }
     create() {
         this.map.finishEditingForHistory(); const result = this.validation();
         if (result.error || this.preserved) { new Notice(result.error ? t(result.error as any) : t('Invalid summary data preserved')); return; }

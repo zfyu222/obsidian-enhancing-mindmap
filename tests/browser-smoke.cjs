@@ -15,11 +15,13 @@ function visit(node) {
 }
 visit(source);
 const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
+names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
     try {
         const page = await browser.newPage({ viewport: { width: 1100, height: 620 } });
+        page.setDefaultTimeout(15000);
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.setContent(`<style>${fs.readFileSync(`${repo}/styles.css`, 'utf8')}
@@ -29,7 +31,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
           #status{margin:16px}</style><h3>Mind map batch selection — release bundle test harness</h3><div id="viewport"><div id="map"></div></div><div id="status"></div>`);
         await page.addScriptTag({ content: `(() => {
             ${code}
-            const cmd = { AddNode, ChangeNodeText, RemoveNodes, MoveNodes, PasteNode };
+            const cmd = { AddNode, ChangeNodeText, RemoveNodes, MoveNodes, PasteNode, CollapseNode, ExpandNode };
+            const randomColor = () => '#90a4bc';
             const t = text => text;
             const obsidian = { Notice: class { constructor(message) { window.lastNotice = message; } }, MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
             const MindMapView = class {};
@@ -40,6 +43,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                     this.containEl=document.createElement('div'); this.containEl.className='mm-node';
                     this.containEl.setAttribute('data-id',data.id);this.containEl.tabIndex=-1;
                     this.contentEl=document.createElement('div');this.contentEl.className='mm-node-content';this.contentEl.textContent=data.text;this.containEl.append(this.contentEl);
+                    this._barDom=document.createElement('div');this._barDom.className='mm-node-bar';this.containEl.append(this._barDom);
                 }
                 selectText(){ProdNode.prototype.selectText.call(this)}
                 edit(){ProdNode.prototype.edit.call(this)} cancelEdit(){ProdNode.prototype.cancelEdit.call(this)}
@@ -48,6 +52,9 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 getId(){return this.data.id} getData(){return JSON.parse(JSON.stringify(this.data))}
                 select(preserve){ProdNode.prototype.select.call(this,preserve)} unSelect(){ProdNode.prototype.unSelect.call(this)}
                 getBox(){return {x:parseFloat(this.containEl.style.left),y:parseFloat(this.containEl.style.top),width:this.containEl.offsetWidth,height:this.containEl.offsetHeight}}
+                getCBox(){return this.getBox()} getPosition(){const b=this.getBox();return{x:b.x,y:b.y}}
+                getChildren(){return this.children}getSiblings(){return this.parent?this.parent.children.filter(n=>n!==this):[]}
+                getShowNodeList(){return ProdNode.prototype.getShowNodeList.call(this)} move(x,y){const p=this.getPosition();this.setPosition(p.x+x,p.y+y)}
                 isShow(){return !this.isHide} clearCacheData(){} refreshBox(){}
                 setPosition(x,y){this.containEl.style.left=x+'px';this.containEl.style.top=y+'px'}
                 show(){this.isHide=false;this.containEl.style.display='block'} hide(){this.isHide=true;this.containEl.style.display='none'}
@@ -56,6 +63,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 addChild(n,index=-1){ProdNode.prototype.addChild.call(this,n,index)} removeChild(n){return ProdNode.prototype.removeChild.call(this,n)}
             }
             const Node$1 = Node;
+            Object.assign(window,{GraftManager,extractGrafts,validGraftGraph});
+            window.makeGraftTestNode=(id,text,parent)=>{const n=new Node({id,text},testMap);n.setPosition(0,0);if(parent){parent.children.push(n);n.parent=parent;}testMap.appEl.append(n.containEl);return n;};
             const Notice = class { constructor(text) { console.error(text); } };
             let clipboardText='';
             Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{clipboardText=text;},readText:async()=>clipboardText}});
@@ -410,7 +419,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
             svg.style.cssText='position:absolute;width:5000px;height:2500px;pointer-events:none'; testMap.appEl.prepend(svg);
             const group=()=>{const el=document.createElementNS(svg.namespaceURI,'g');svg.append(el);return {clear(){el.replaceChildren()},group,
-                path(d){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);el.append(path);return {node:path,fill(v){path.setAttribute('fill',v);return this},stroke(v){path.setAttribute('stroke','#8f9baa');path.setAttribute('stroke-width',v.width);return this},addClass(v){path.classList.add(v);path.style.pointerEvents='stroke';return this}}}}};
+                line(x1,y1,x2,y2){return this.path('M '+x1+' '+y1+' L '+x2+' '+y2);},
+                path(d){const path=document.createElementNS(svg.namespaceURI,'path');if(d)path.setAttribute('d',d);el.append(path);return {node:path,plot(v){path.setAttribute('d',v);return this},fill(v){path.setAttribute('fill',v);return this},stroke(v){path.setAttribute('stroke','#8f9baa');path.setAttribute('stroke-width',v.width);return this},addClass(v){path.classList.add(v);path.style.pointerEvents='stroke';return this}}}}};
             testMap.edgeGroup={group};testMap.contentEL=testMap.appEl;
             testMap.summaries=new SummaryManager(testMap);
             const [a,b,c]=[testNodes.a,testNodes.b,testNodes.target];
@@ -1008,6 +1018,68 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>searchMap.exec.history.undos.length),0);
         await page.evaluate(()=>{searchNav.clear();document.querySelector('#search-viewport').remove();});
         console.log('Search navigation: real search payload, render queue, duplicate nodes, folded ancestors, selection, exact visual center at 150% zoom, latest result and manual pan cancellation passed.');
+        // Virtual branches use the production layout, manager, editor, toolbar and graph history.
+        await page.evaluate(()=>{
+            const map=testMap;map.finishEditingForHistory();map.summaries.clear();map.relations.clear();
+            map.traverseDF(n=>{if(n!==map.root)n.containEl.remove();});map.root.children=[];
+            map.root.data.text='虚拟分支';map.root.contentEl.textContent='虚拟分支';map.root.setPosition(100,350);
+            map.setting.layoutDirect='right';map.setting.headLevel=1;map.setting.defaultNodeStyle={};map.setting.nodeStylePresets=[];
+            map.mmLayout=null;map.centerOnNode=()=>{};map.refresh=MindMap.prototype.refresh;map.grafts=new GraftManager(map);
+            map._nodeNum=0;map._tempNum=0;map.on('initNode',map.initNode.bind(map));map.on('renderEditNode',map.renderEditNode.bind(map));
+            const a=makeGraftTestNode('graft-a','来源 A',map.root),a1=makeGraftTestNode('graft-a1','共享内容',a);
+            const b=makeGraftTestNode('graft-b','挂接 B',map.root),c=makeGraftTestNode('graft-c','挂接 C',map.root);
+            window.graftTest={a,a1,b,c};map.exec.history.clear();map.refresh();map.setSelectedNodes([a]);
+        });
+        const graft=page.getByRole('button',{name:'Graft virtual branch',exact:true});
+        const detach=page.getByRole('button',{name:'Detach virtual branch',exact:true});
+        await graft.click();
+        await page.locator('[data-id="graft-b"] .mm-node-content').click();
+        assert.equal(await page.evaluate(()=>testMap.grafts.items.length),1);
+        assert.equal(await page.evaluate(()=>graftTest.b.children.length),0);
+        await page.evaluate(()=>testMap.setSelectedNodes([graftTest.a]));await graft.click();
+        await page.locator('[data-id="graft-c"] .mm-node-content').click();
+        assert.equal(await page.locator('.mm-virtual-node').count(),4);
+        const mirror=page.locator('.mm-virtual-node .mm-node-content').filter({hasText:'共享内容'}).first();
+        console.log('Virtual branches: two references mounted; editing shared child.');
+        await mirror.dblclick();await page.keyboard.press('Control+a');await page.keyboard.type('同步修改');
+        assert.equal(await page.locator('[data-id="graft-a1"] .mm-node-content').innerText(),'同步修改','Typing previews the source without duplicating Markdown');
+        await page.evaluate(()=>testMap.finishEditingForHistory());
+        assert.equal(await page.evaluate(()=>graftTest.a1.data.text),'同步修改');
+        assert.equal(await page.locator('.mm-virtual-node .mm-node-content').filter({hasText:'同步修改'}).count(),2);
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>graftTest.a1.data.text),'共享内容');
+        await page.keyboard.press('Control+y');assert.equal(await page.evaluate(()=>graftTest.a1.data.text),'同步修改');
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node.children[0]]));
+        await page.evaluate(()=>testMap.applyLocalNodeStyle({backgroundColor:'#193c55',shape:'rounded',bold:true}));
+        assert.equal(await page.evaluate(()=>graftTest.a1.data.nodeStyle.bold),true);
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.children[0].data.nodeStyle.backgroundColor),'#193c55');
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node]));
+        console.log('Virtual branches: shared text, history and style passed; adding child.');
+        await tool('child').click();await page.waitForFunction(()=>testMap.editNode?.parent===graftTest.a);
+        await page.keyboard.type('新增共享子节点');await page.evaluate(()=>testMap.finishEditingForHistory());
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots.every(root=>root.node.children.length===2)),true);
+        await page.evaluate(()=>{testMap.execute('collapseNode',{node:graftTest.b});});
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[0].node.isShow()),false);
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.isShow()),true);
+        await page.evaluate(()=>testMap.execute('expandNode',{node:graftTest.b}));
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+        // Virtual trees must reserve real layout space rather than overlap adjacent branches.
+        const overlaps=await page.evaluate(()=>{const boxes=[];testMap.traverseAll(n=>{if(n.isShow())boxes.push({id:n.getId(),...n.containEl.getBoundingClientRect().toJSON()});});const pairs=[];for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)pairs.push([a,b]);}return pairs;});
+        await page.screenshot({path:path.join(screenshotDir,'virtual-branches.png')});
+        assert.deepEqual(overlaps,[],'Projected trees reserve space in the production layout');
+        const graftRaw=await page.evaluate(()=>testMap.getMarkdown());
+        assert.equal((graftRaw.match(/同步修改/g)||[]).length,1);assert.ok(!graftRaw.includes('virtual:'));
+        const savedGrafts=await page.evaluate(()=>extractGrafts(testMap.getMarkdown()).entries);
+        await page.evaluate(entries=>{testMap.grafts.clear();testMap.grafts=new GraftManager(testMap);testMap.grafts.load(entries);testMap.refresh();testMap.setSelectedNodes([testMap.grafts.roots[0].node]);},savedGrafts);
+        await detach.click();assert.equal(await page.evaluate(()=>testMap.grafts.items.length),1);
+        assert.equal(await page.evaluate(()=>graftTest.a.children.length),2);
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testMap.grafts.items.length),2);
+        await page.evaluate(()=>{testMap.setSelectedNodes([testMap.grafts.roots[0].node]);});await page.keyboard.press('Delete');
+        assert.equal(await page.evaluate(()=>testMap.grafts.items.length),1);assert.equal(await page.evaluate(()=>testMap.getNodeById('graft-a')===graftTest.a),true);
+        await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testMap.grafts.items.length),2);
+        await page.evaluate(()=>{testMap.setSelectedNodes([graftTest.a]);testMap.deleteSelectedNodes();});
+        assert.equal(await page.locator('.mm-virtual-node').count(),0);
+        await page.keyboard.press('Control+z');assert.equal(await page.locator('.mm-virtual-node').count(),6);
+        console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

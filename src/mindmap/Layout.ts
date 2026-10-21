@@ -137,7 +137,35 @@ export default class Layout {
         // balance layout
         this._doRefresh();
 
+        if (this.mind?.grafts?.items.length) this.reserveGraftSpace(this.root);
+
         this.createLink();
+    }
+
+    // Repeated subtrees can have different rendered heights at different depths.
+    // Pack complete visible branch bounds, then center each group on its parent.
+    reserveGraftSpace(node: Node) {
+        if (!node.isExpand || !node.isShow()) return;
+        node.children.forEach(child => this.reserveGraftSpace(child));
+        for (const side of ['left', 'right']) {
+            const children = node.children.filter(child => child.isShow() && child.direct === side)
+                .sort((a, b) => a.getBox().y - b.getBox().y);
+            if (!children.length) continue;
+            const gap = node === this.root ? this.firstNodeDis : this.nodeDis;
+            let bottom = -Infinity;
+            children.forEach(child => {
+                const bounds = this.mind.getBoundingRect(child.getShowNodeList());
+                const dy = Math.max(0, bottom + gap - bounds.y);
+                if (dy) this.moveNode(child, 0, dy);
+                bottom = bounds.bottom + dy;
+            });
+            const visible: Node[] = [];
+            children.forEach(child => visible.push(...child.getShowNodeList()));
+            const bounds = this.mind.getBoundingRect(visible), box = node.getBox();
+            const dy = box.y + box.height / 2 - (bounds.y + bounds.height / 2);
+            children.forEach(child => this.moveNode(child, 0, dy));
+        }
+        node.boundingRect = null;
     }
 
     layoutMindMap(){
