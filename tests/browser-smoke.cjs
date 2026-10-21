@@ -229,8 +229,67 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.locator('[data-id="Target"] .mm-node-content').dblclick();
         assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
         assert.ok((await page.evaluate(() => getSelection().toString())).length > 0);
+        // Moving horizontally above/below the editor must keep extending the selection.
+        for (const side of [-1, 1]) {
+            await page.evaluate(() => getSelection().removeAllRanges());
+            const points = await page.evaluate(side => {
+                const el = testNodes.target.contentEl, text = el.firstChild;
+                const point = offset => { const r = document.createRange(); r.setStart(text, offset); r.collapse(true); const b = r.getBoundingClientRect(); return {x:b.left,y:(b.top+b.bottom)/2}; };
+                const box = el.getBoundingClientRect();
+                return {start:point(0), three:point(3), eight:point(8), outside:side < 0 ? box.top-25 : box.bottom+25};
+            }, side);
+            await page.mouse.move(points.start.x, points.start.y); await page.mouse.down();
+            await page.mouse.move(points.three.x, points.three.y);
+            await page.mouse.move(points.three.x, points.outside);
+            await page.mouse.move(points.eight.x, points.outside, {steps:8});
+            await page.waitForTimeout(40);
+            assert.equal(await page.evaluate(() => getSelection().toString()), updated.slice(0,8), 'Horizontal drag outside editor must extend selection');
+            await page.mouse.move(points.three.x, points.outside, {steps:8});
+            await page.waitForTimeout(40);
+            assert.equal(await page.evaluate(() => getSelection().toString()), updated.slice(0,3), 'Reverse drag outside editor must shrink selection');
+            await page.mouse.up();
+            assert.equal(await page.evaluate(() => testNodes.target.data.isEdit), true);
+        }
+        // Multi-line Chinese/emoji text, reverse selection, zoom and reentry into native selection.
+        for (const scale of [0.75, 1.5]) {
+            const points = await page.evaluate(scale => {
+                const el=testNodes.target.contentEl;
+                el.innerHTML='<span>第一行文字ABCDE</span><br><span>第二行😀FGHIJK</span>';
+                testNodes.target.containEl.style.transform='scale('+scale+')';
+                testNodes.target.containEl.style.transformOrigin='top left';
+                getSelection().removeAllRanges();
+                const point=(text,offset)=>{const r=document.createRange();r.setStart(text,offset);r.collapse(true);const b=r.getBoundingClientRect();return{x:b.left,y:(b.top+b.bottom)/2};};
+                const first=el.firstChild.firstChild,last=el.lastChild.firstChild,box=el.getBoundingClientRect();
+                const expected=document.createRange();expected.setStart(first,2);expected.setEnd(last,7);
+                return{start:point(first,2),end:point(last,7),top:box.top-20,bottom:box.bottom+20,expected:(getSelection().addRange(expected),getSelection().toString())};
+            },scale);
+            await page.evaluate(()=>getSelection().removeAllRanges());
+            if(scale===0.75) await page.evaluate(()=>Object.defineProperty(document,'caretPositionFromPoint',{value:undefined,configurable:true}));
+            await page.mouse.move(points.start.x,points.start.y);await page.mouse.down();
+            await page.mouse.move(points.end.x,points.bottom,{steps:10});
+            await page.waitForTimeout(40);
+            assert.equal(await page.evaluate(()=>getSelection().toString()),points.expected);
+            await page.mouse.up();
+            const selected=await page.evaluate(()=>getSelection().toString());
+            await page.mouse.move(500,400);
+            assert.equal(await page.evaluate(()=>getSelection().toString()),selected,'Release stops text selection');
+            await page.evaluate(()=>getSelection().removeAllRanges());
+            await page.mouse.move(points.end.x,points.end.y);await page.mouse.down();
+            await page.mouse.move(points.start.x,points.top,{steps:10});
+            await page.waitForTimeout(40);
+            assert.equal(await page.evaluate(()=>getSelection().toString()),points.expected,'Backward multi-line drag');
+            assert.equal(await page.evaluate(()=>getSelection().anchorNode===testNodes.target.contentEl.lastChild.firstChild),true);
+            await page.mouse.move(points.start.x,points.start.y,{steps:4});
+            await page.mouse.up();
+            assert.equal(await page.evaluate(()=>getSelection().toString()),points.expected,'Reenter editor preserves native drag');
+            await page.screenshot({path:path.join(screenshotDir,'editor-outside-text-selection.png')});
+            await page.evaluate(()=>{delete document.caretPositionFromPoint;testNodes.target.containEl.style.transform='';});
+        }
+        await page.evaluate(text=>{testNodes.target.contentEl.textContent=text;getSelection().removeAllRanges();},updated);
+        console.log('Outside editor drag: horizontal extension/shrink above and below, multiline Chinese/emoji, reverse direction, zoom, legacy caret API, reentry and release passed.');
         // Real text selection dragged out of the editor must keep its range and focus.
         for (const end of [{ x: 700, y: 420 }, { x: 300, y: 260 }]) {
+            await page.evaluate(() => getSelection().removeAllRanges());
             const start = await page.evaluate(() => {
                 const range = document.createRange();
                 range.setStart(testNodes.target.contentEl.firstChild, 3);

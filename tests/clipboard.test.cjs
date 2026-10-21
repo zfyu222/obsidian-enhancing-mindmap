@@ -543,6 +543,24 @@ test('window blur clears the pending editor mouse gesture', () => {
     assert.equal(map._editorMouseDown, false); assert.equal(map._editorClickPending, false);
 });
 
+test('outside editor drag finalizes on release but cancels pending selection on blur or lost button', () => {
+    for (const finish of ['release', 'blur', 'lost-button']) {
+        const map = keyboardFixture(); let applied = 0; const cancelled = [];
+        const editor = { ownerDocument: { defaultView: { cancelAnimationFrame: id => cancelled.push(id) } } };
+        map.root.contentEl = editor; map.root.data.isEdit = true; map.editNode = map.root;
+        map._editorMouseDown = true;
+        map._editorDrag = { editor, frame: 42, apply: () => applied++ };
+        if (finish === 'release') map.appMouseUp({ type: 'mouseup', button: 0 });
+        else if (finish === 'blur') map.appMouseUp({ type: 'blur' });
+        else map.appMouseMove({ buttons: 0 });
+        assert.deepEqual(cancelled, [42]);
+        assert.equal(applied, finish === 'release' ? 1 : 0);
+        assert.equal(map._editorDrag, null);
+        assert.equal(map.root.data.isEdit, true);
+        assert.equal(map._selectionStart, undefined);
+    }
+});
+
 test('clicking another node commits the previous editor once and selects the destination', () => {
     const map = keyboardFixture(); const edited = map.root; const other = add(map, map.root, 'Other');
     edited.data.isEdit = true; edited.contentEl = { contains: () => false }; map.editNode = edited;

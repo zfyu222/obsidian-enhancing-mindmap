@@ -59,6 +59,7 @@ export default class MindMap {
     _suppressContextUntil = 0;
     _suppressClickUntil = 0;
     _editorMouseDown = false;
+    _editorDrag: { editor: HTMLElement; anchorNode?: Node; anchorOffset?: number; frame?: number; apply?: () => void } = null;
     _editorClickPending = false;
     setting: Setting;
     data: INodeData;
@@ -380,6 +381,7 @@ export default class MindMap {
     }
 
     removeEvent() {
+        this.endEditorDrag();
         this.appEl.removeEventListener('click', this.appClickFn);
         this.appEl.removeEventListener('contextmenu', this.appContextMenu, true);
         document.removeEventListener('paste', this.appPaste, true);
@@ -1852,7 +1854,73 @@ export default class MindMap {
         }
     }
 
+    endEditorDrag(apply = false) {
+        const drag = this._editorDrag;
+        if (!drag) return;
+        if (drag.frame != null) drag.editor.ownerDocument.defaultView.cancelAnimationFrame(drag.frame);
+        if (apply) drag.apply?.();
+        this._editorDrag = null;
+    }
+
+    // Keep native editing inside the box; project outside drags onto the nearest text row.
+    extendEditorDrag(evt: MouseEvent) {
+        const drag = this._editorDrag;
+        const node = this.editNode || this.selectNode;
+        if (!drag || !node?.data.isEdit || node.contentEl !== drag.editor || !(evt.buttons & 1)) {
+            this.endEditorDrag();
+            return;
+        }
+        const editor = drag.editor, doc = editor.ownerDocument;
+        if (drag.frame != null) doc.defaultView.cancelAnimationFrame(drag.frame);
+        drag.apply = null;
+        const selection = doc.getSelection();
+        if (!selection || !editor.contains(selection.anchorNode)) return;
+        // mousedown's default action establishes the native anchor before the first move.
+        if (!drag.anchorNode) {
+            drag.anchorNode = selection.anchorNode;
+            drag.anchorOffset = selection.anchorOffset;
+        }
+        if (!editor.contains(drag.anchorNode)) { this.endEditorDrag(); return; }
+        const bounds = editor.getBoundingClientRect();
+        if (evt.clientX >= bounds.left && evt.clientX <= bounds.right &&
+            evt.clientY >= bounds.top && evt.clientY <= bounds.bottom) return;
+        const walker = doc.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+        const range = doc.createRange();
+        let text: Node, row: DOMRect = null, distance = Infinity;
+        while ((text = walker.nextNode())) {
+            range.selectNodeContents(text);
+            for (const rect of Array.from(range.getClientRects())) {
+                if (!rect.height || !rect.width) continue;
+                const dy = Math.max(rect.top - evt.clientY, evt.clientY - rect.bottom, 0);
+                const dx = Math.max(rect.left - evt.clientX, evt.clientX - rect.right, 0);
+                const score = dy * 100000 + dx;
+                if (score < distance) { distance = score; row = rect; }
+            }
+        }
+        if (!row) return;
+        const x = Math.max(row.left + 0.1, Math.min(row.right - 0.1, evt.clientX));
+        const y = (row.top + row.bottom) / 2;
+        const caretDoc = doc as Document & {
+            caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number };
+            caretRangeFromPoint?: (x: number, y: number) => Range;
+        };
+        const position = caretDoc.caretPositionFromPoint?.(x, y);
+        const caret = position ? null : caretDoc.caretRangeFromPoint?.(x, y);
+        const focusNode = position?.offsetNode || caret?.startContainer;
+        const focusOffset = position ? position.offset : caret?.startOffset;
+        if (!focusNode || !editor.contains(focusNode)) return;
+        evt.preventDefault();
+        drag.apply = () => {
+            if (this._editorDrag === drag && node.data.isEdit && editor.isConnected && editor.contains(drag.anchorNode) && editor.contains(focusNode))
+                selection.setBaseAndExtent(drag.anchorNode, drag.anchorOffset, focusNode, focusOffset);
+        };
+        drag.apply();
+        // Apply after Chromium finishes its native mousemove selection update.
+        drag.frame = doc.defaultView.requestAnimationFrame(drag.apply);
+    }
+
     appMouseMove(evt: MouseEvent) {
+        if (this._editorMouseDown) { this.extendEditorDrag(evt); return; }
         if (this._panning) {
             if (Math.abs(evt.clientX - this.startX) + Math.abs(evt.clientY - this.startY) >= 4) this._panMoved = true;
             this.containerEL.scrollLeft = this._left - (evt.clientX - this.startX);
@@ -1893,7 +1961,12 @@ export default class MindMap {
     appMouseDown(evt: MouseEvent) {
         this._editorClickPending = false;
         this._editorMouseDown = evt.button === 0 && this.isNodeEditorTarget(evt.target);
-        if (this._editorMouseDown) return;
+        this.endEditorDrag();
+        if (this._editorMouseDown) {
+            const editor = (this.editNode || this.selectNode).contentEl;
+            if (editor.ownerDocument) this._editorDrag = { editor };
+            return;
+        }
         const target = evt.target as HTMLElement;
         if (target.closest('.mm-node-menu, .mm-node-bar, a, input, textarea, [contenteditable="true"]')) return;
         if (evt.button === 2) {
@@ -1923,6 +1996,7 @@ export default class MindMap {
     }
 
     appMouseUp(evt: MouseEvent | FocusEvent) {
+        if (evt.type === 'blur' || (evt as MouseEvent).button === 0) this.endEditorDrag(evt.type !== 'blur');
         if (evt.type === 'blur') {
             this._editorMouseDown = false;
             this._editorClickPending = false;
