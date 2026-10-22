@@ -5,12 +5,14 @@ import { Notice } from 'obsidian';
 import { uuid } from '../MindMapView';
 import { t } from '../lang/helpers';
 import { GraftData, graftsMarkdown, validGraftGraph } from './model';
+import { relationCurve } from '../relations/model';
 
 /** References are durable; projected nodes and their visual parents are runtime only. */
 export default class GraftManager {
     items: GraftData[] = []; preserved = ''; pending = '';
     nodes = new Map<string, Node>(); roots: { link: GraftData; node: Node; target: Node }[] = [];
     attached = false;
+    sourceLinks?: SVGGElement;
     constructor(public map: any) { map.appEl.addEventListener?.('input', this.preview); }
     preview = () => {
         const editor = this.map.editNode;
@@ -22,6 +24,7 @@ export default class GraftManager {
             node.contentEl.textContent = editor.contentEl.innerText;
             node.virtualPreview = true; node.refreshBox();
         });
+        this.renderSourceLinks();
     };
     original(node: any): any { return node?.virtualSource || node; }
     originals(): any[] {
@@ -164,5 +167,29 @@ export default class GraftManager {
         });
         try { action(); } finally { parents.forEach((children, node) => node.children = children); this.attached = false; }
     }
-    clear() { this.map.appEl.removeEventListener?.('input', this.preview); this.nodes.forEach(node => node.containEl.remove()); this.nodes.clear(); this.roots = []; this.items = []; this.pending = ''; }
+    renderSourceLinks() {
+        const host = this.map.contentEL?.querySelector?.('svg'), doc = this.map.contentEL?.ownerDocument;
+        if (!host || !doc) return;
+        if (!this.sourceLinks || this.sourceLinks.parentNode !== host) {
+            if (!this.nodes.size) return;
+            this.sourceLinks = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
+            this.sourceLinks.classList.add('mm-graft-source-links');
+            this.sourceLinks.setAttribute('aria-hidden', 'true');
+            host.insertBefore(this.sourceLinks, host.firstChild);
+        }
+        this.sourceLinks.textContent = '';
+        this.nodes.forEach(node => {
+            const source = node.virtualSource;
+            // Ordinary projected descendants do not each need a source link.
+            // A nested graft has a different visual parent from its true parent.
+            if (!source || (!node.virtualRoot && node.parent?.virtualSource === source.parent) || !node.isShow() || !source.isShow()) return;
+            const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('class', 'mm-graft-source-line');
+            path.setAttribute('data-source-id', source.getId());
+            path.setAttribute('data-virtual-id', node.getId());
+            path.setAttribute('d', relationCurve(node.getBox(), source.getBox()).path);
+            this.sourceLinks!.appendChild(path);
+        });
+    }
+    clear() { this.sourceLinks?.remove(); this.sourceLinks = undefined; this.map.appEl.removeEventListener?.('input', this.preview); this.nodes.forEach(node => node.containEl.remove()); this.nodes.clear(); this.roots = []; this.items = []; this.pending = ''; }
 }

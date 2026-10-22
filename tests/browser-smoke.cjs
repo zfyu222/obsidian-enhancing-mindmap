@@ -1024,7 +1024,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.traverseDF(n=>{if(n!==map.root)n.containEl.remove();});map.root.children=[];
             map.root.data.text='虚拟分支';map.root.contentEl.textContent='虚拟分支';map.root.setPosition(100,350);
             map.setting.layoutDirect='right';map.setting.headLevel=1;map.setting.defaultNodeStyle={};map.setting.nodeStylePresets=[];
-            map.mmLayout=null;map.centerOnNode=()=>{};map.refresh=MindMap.prototype.refresh;map.grafts=new GraftManager(map);
+            map.mmLayout=null;map.centerOnNode=()=>{};map.refresh=MindMap.prototype.refresh;map.addNode=MindMap.prototype.addNode;map.grafts=new GraftManager(map);
             map._nodeNum=0;map._tempNum=0;map.on('initNode',map.initNode.bind(map));map.on('renderEditNode',map.renderEditNode.bind(map));
             const a=makeGraftTestNode('graft-a','来源 A',map.root),a1=makeGraftTestNode('graft-a1','共享内容',a);
             const b=makeGraftTestNode('graft-b','挂接 B',map.root),c=makeGraftTestNode('graft-c','挂接 C',map.root);
@@ -1039,6 +1039,17 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.evaluate(()=>testMap.setSelectedNodes([graftTest.a]));await graft.click();
         await page.locator('[data-id="graft-c"] .mm-node-content').click();
         assert.equal(await page.locator('.mm-virtual-node').count(),4);
+        assert.equal(await page.locator('.mm-graft-source-line').count(),2,'Only virtual roots have source links');
+        const sourceLineStyle=await page.locator('.mm-graft-source-line').first().evaluate(el=>{const s=getComputedStyle(el);return{color:s.stroke,dash:s.strokeDasharray,pointer:s.pointerEvents};});
+        assert.equal(sourceLineStyle.color,'rgb(233, 213, 138)');assert.notEqual(sourceLineStyle.dash,'none');assert.equal(sourceLineStyle.pointer,'none');
+        assert.equal(await page.evaluate(()=>Array.from(document.querySelectorAll('.mm-graft-source-line')).every(path=>{
+            const mirror=testMap.getNodeById(path.getAttribute('data-virtual-id')),source=mirror.virtualSource;
+            return path.getAttribute('data-source-id')===source.getId()&&path.getAttribute('d')===relationCurve(mirror.getBox(),source.getBox()).path;
+        })),true,'Source links attach to the matching original node');
+        const previousSourcePath=await page.locator('.mm-graft-source-line').first().getAttribute('d');
+        await page.evaluate(()=>testMap.execute('moveNodes',{nodes:[graftTest.a],dropNode:graftTest.c,type:'child-right'}));
+        assert.notEqual(await page.locator('.mm-graft-source-line').first().getAttribute('d'),previousSourcePath,'Moving the source updates the path');
+        await page.keyboard.press('Control+z');
         const mirror=page.locator('.mm-virtual-node .mm-node-content').filter({hasText:'共享内容'}).first();
         console.log('Virtual branches: two references mounted; editing shared child.');
         await mirror.dblclick();await page.keyboard.press('Control+a');await page.keyboard.type('同步修改');
@@ -1060,17 +1071,21 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.evaluate(()=>{testMap.execute('collapseNode',{node:graftTest.b});});
         assert.equal(await page.evaluate(()=>testMap.grafts.roots[0].node.isShow()),false);
         assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.isShow()),true);
+        assert.equal(await page.locator('.mm-graft-source-line').count(),1,'Hidden virtual roots have no source line');
         await page.evaluate(()=>testMap.execute('expandNode',{node:graftTest.b}));
+        assert.equal(await page.locator('.mm-graft-source-line').count(),2);
         await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
         // Virtual trees must reserve real layout space rather than overlap adjacent branches.
         const overlaps=await page.evaluate(()=>{const boxes=[];testMap.traverseAll(n=>{if(n.isShow())boxes.push({id:n.getId(),...n.containEl.getBoundingClientRect().toJSON()});});const pairs=[];for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1)pairs.push([a,b]);}return pairs;});
         await page.screenshot({path:path.join(screenshotDir,'virtual-branches.png')});
+        await page.screenshot({path:path.join(screenshotDir,'virtual-branch-source-links.png')});
         assert.deepEqual(overlaps,[],'Projected trees reserve space in the production layout');
         const graftRaw=await page.evaluate(()=>testMap.getMarkdown());
         assert.equal((graftRaw.match(/同步修改/g)||[]).length,1);assert.ok(!graftRaw.includes('virtual:'));
         const savedGrafts=await page.evaluate(()=>extractGrafts(testMap.getMarkdown()).entries);
         await page.evaluate(entries=>{testMap.grafts.clear();testMap.grafts=new GraftManager(testMap);testMap.grafts.load(entries);testMap.refresh();testMap.setSelectedNodes([testMap.grafts.roots[0].node]);},savedGrafts);
         await detach.click();assert.equal(await page.evaluate(()=>testMap.grafts.items.length),1);
+        assert.equal(await page.locator('.mm-graft-source-line').count(),1);
         assert.equal(await page.evaluate(()=>graftTest.a.children.length),2);
         await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testMap.grafts.items.length),2);
         await page.evaluate(()=>{testMap.setSelectedNodes([testMap.grafts.roots[0].node]);});await page.keyboard.press('Delete');
@@ -1078,7 +1093,14 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.keyboard.press('Control+z');assert.equal(await page.evaluate(()=>testMap.grafts.items.length),2);
         await page.evaluate(()=>{testMap.setSelectedNodes([graftTest.a]);testMap.deleteSelectedNodes();});
         assert.equal(await page.locator('.mm-virtual-node').count(),0);
+        assert.equal(await page.locator('.mm-graft-source-line').count(),0);
         await page.keyboard.press('Control+z');assert.equal(await page.locator('.mm-virtual-node').count(),6);
+        assert.equal(await page.locator('.mm-graft-source-line').count(),2);
+        await page.evaluate(()=>testMap.grafts.create(graftTest.c.getId(),graftTest.b.getId()));
+        assert.equal(await page.locator('.mm-graft-source-line').count(),4,'Nested graft roots also link to their originals');
+        assert.equal(await page.locator('.mm-graft-source-line[data-source-id="graft-a"]').count(),3);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.locator('.mm-graft-source-line').count(),2);
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

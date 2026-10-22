@@ -2400,6 +2400,7 @@ export default class MindMap {
         if (this.summaryTransaction) return;
         const layout = () => { this.layout(); this.summaries?.layout(); };
         if (this.grafts) this.grafts.withTrees(layout); else layout();
+        this.grafts?.renderSourceLinks();
         this.relations?.render();
     }
 
