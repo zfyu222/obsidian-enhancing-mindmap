@@ -44,6 +44,10 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                     this.containEl.setAttribute('data-id',data.id);this.containEl.tabIndex=-1;
                     this.contentEl=document.createElement('div');this.contentEl.className='mm-node-content';this.contentEl.textContent=data.text;this.containEl.append(this.contentEl);
                     this._barDom=document.createElement('div');this._barDom.className='mm-node-bar';this.containEl.append(this._barDom);
+                    if(window.cachedGraftGeometry){
+                        this.box={x:0,y:0,width:0,height:0};
+                        for(const method of ['getBox','getCBox','getDomBox','refreshBox','setPosition','clearCacheData'])this[method]=ProdNode.prototype[method];
+                    }
                 }
                 selectText(){ProdNode.prototype.selectText.call(this)}
                 edit(){ProdNode.prototype.edit.call(this)} cancelEdit(){ProdNode.prototype.cancelEdit.call(this)}
@@ -64,7 +68,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             }
             const Node$1 = Node;
             Object.assign(window,{GraftManager,extractGrafts,validGraftGraph});
-            window.makeGraftTestNode=(id,text,parent)=>{const n=new Node({id,text},testMap);n.setPosition(0,0);if(parent){parent.children.push(n);n.parent=parent;}testMap.appEl.append(n.containEl);return n;};
+            window.makeGraftTestNode=(id,text,parent)=>{const n=new Node({id,text},testMap);n.setPosition(0,0);if(parent){parent.children.push(n);n.parent=parent;}testMap.appEl.append(n.containEl);n.refreshBox();return n;};
             const Notice = class { constructor(text) { console.error(text); } };
             let clipboardText='';
             Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{clipboardText=text;},readText:async()=>clipboardText}});
@@ -1129,6 +1133,39 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.keyboard.type('独立折叠下的共享内容');await page.evaluate(()=>testMap.finishEditingForHistory());
         assert.equal(await page.evaluate(()=>graftTest.a.children.at(-1).data.text),'独立折叠下的共享内容');
         console.log('Independent virtual folds: actual fold controls, source/copy isolation, undo/redo, persisted reload, unchanged DOM count and adding while the source is collapsed passed.');
+        // Production nodes cache content dimensions; dynamic DOM reads mask hidden-node regressions.
+        await page.evaluate(()=>{
+            const map=testMap;map.grafts.clear();window.cachedGraftGeometry=true;
+            const source=makeGraftTestNode('cached-source','Cached source',map.root);
+            for(let i=0;i<5;i++){
+                const child=makeGraftTestNode('cached-child-'+i,'Child with a long label '+i,source);
+                makeGraftTestNode('cached-leaf-'+i,'Leaf '+i,child);
+            }
+            const target=makeGraftTestNode('cached-target','Cached target',map.root);
+            map.grafts=new GraftManager(map);map.grafts.create(source.getId(),target.getId());
+            window.cachedGraftTest={source,target};map.refresh();
+        });
+        for(const mode of ['target','virtual','descendant','reload','history','target']){
+            await page.evaluate(mode=>{
+                const map=testMap;
+                const node=mode==='target'?cachedGraftTest.target:mode==='descendant'?map.grafts.roots[0].node.children[0]:map.grafts.roots[0].node;
+                map.execute('collapseNode',{node});map.refresh();
+                if(mode==='reload'){
+                    const entries=extractGrafts(map.getMarkdown()).entries;
+                    map.grafts.clear();map.grafts=new GraftManager(map);map.grafts.load(entries);map.refresh();
+                    map.execute('expandNode',{node:map.grafts.roots[0].node});
+                }else if(mode==='history'){map.undo();map.redo();map.undo();}
+                else map.execute('expandNode',{node});
+            },mode);
+            const geometry=await page.evaluate(()=>Array.from(testMap.grafts.nodes.values()).filter(n=>n.isShow()).map(n=>({id:n.getId(),cached:n.getBox(),width:n.contentEl.offsetWidth,height:n.contentEl.offsetHeight})));
+            for(const node of geometry){assert.equal(node.cached.width,node.width,'Expanded mirror must remeasure its visible width: '+node.id);assert.equal(node.cached.height,node.height,'Expanded mirror must remeasure its visible height: '+node.id);}
+            for(let i=0;i<geometry.length;i++)for(let j=i+1;j<geometry.length;j++){
+                const a=geometry[i].cached,b=geometry[j].cached;
+                assert.ok(!(a.x<b.x+b.width&&a.x+a.width>b.x&&a.y<b.y+b.height&&a.y+a.height>b.y),'Expanded virtual nodes must not overlap');
+            }
+        }
+        await page.screenshot({path:path.join(screenshotDir,'virtual-expansion-cached-geometry.png')});
+        console.log('Cached production geometry: target/virtual root/descendant collapse and expansion, persisted reload and undo/redo restore visible dimensions without subtree collisions.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

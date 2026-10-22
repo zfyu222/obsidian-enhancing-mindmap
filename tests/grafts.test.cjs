@@ -107,6 +107,15 @@ test('source, each projection and descendants fold independently with deep histo
  assert.equal(copied.text[0].expanded,true);assert.equal(copied.text[1].expanded,false);
 });
 
+test('visible mirrors remeasure after hidden target expansion and restored fold snapshots',()=>{
+ const {map,a,b}=fixture();map.grafts.create(a.getId(),b.getId());
+ map.grafts.nodes.forEach(node=>{node.refreshBox=function(){this.box={width:this.isShow()?120:0,height:this.isShow()?30:0}};});
+ const check=()=>map.grafts.nodes.forEach(node=>{if(node.isShow())assert.deepEqual(node.box,{width:120,height:30});});
+ map.execute('collapseNode',{node:b});map.refresh();map.execute('expandNode',{node:b});check();
+ const mirror=map.grafts.roots[0].node;
+ map.execute('collapseNode',{node:mirror});map.undo();check();map.redo();map.undo();check();
+});
+
 test('legacy references inherit folds once and nested instances keep separate fold paths',()=>{
  const {map,a,a1,b,c}=fixture();a.collapse();
  map.grafts.load([{id:'legacy',source:a.getId(),target:b.getId()}]);map.refresh();

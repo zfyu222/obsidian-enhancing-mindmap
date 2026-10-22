@@ -149,7 +149,7 @@ export default class GraftManager {
             this.items.filter(item => item.target === source.getId()).forEach(item => {
                 const nested = byId.get(item.source); if (nested) mirror!.children.push(build(nested, mirror!, link, path + ':' + item.id, false, [...chain, item.id]));
             });
-            mirror.refreshBox(); mirror.clearCacheData(); return mirror;
+            return mirror;
         };
         const renderable = validGraftGraph(Array.from(byId.values()), this.items);
         (renderable ? this.items : []).forEach(link => {
@@ -160,6 +160,10 @@ export default class GraftManager {
         this.markers();
         const visibility = (node: Node, visible: boolean) => {
             if (visible) node.show(); else node.hide();
+            // Hidden DOM measures as zero. Restore visibility before caching the
+            // dimensions consumed by layout, including restored fold snapshots.
+            if (visible) node.refreshBox();
+            node.clearCacheData();
             node.children.forEach(child => visibility(child, visible && node.isExpand));
         };
         this.roots.forEach(({ node, target }) => visibility(node, target.isShow() && target.isExpand));
