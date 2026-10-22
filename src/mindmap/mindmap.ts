@@ -2283,7 +2283,12 @@ export default class MindMap {
         if (this.grafts && data) {
             if (name === 'removeNodes' && this.grafts.removeNodes(data.nodes)) return;
             data = { ...data };
-            for (const key of ['node', 'parent', 'dropNode', 'oldParent', 'newParent']) if (data[key]) data[key] = this.grafts.original(data[key]);
+            if ((name === 'addChildNode' || name === 'addSiblingNode') && data.parent?.virtualSource) data.virtualParent = data.parent;
+            if (name === 'pasteNode' && data.node?.virtualSource) data.virtualParent = data.node;
+            for (const key of ['node', 'parent', 'dropNode', 'oldParent', 'newParent']) {
+                if (key === 'node' && (name === 'collapseNode' || name === 'expandNode')) continue;
+                if (data[key]) data[key] = this.grafts.original(data[key]);
+            }
             if (data.nodes) data.nodes = Array.from(new Set(data.nodes.map((node: INode) => this.grafts.original(node))));
         }
         const result = this.exec.execute(name, data);
@@ -2657,7 +2662,7 @@ export default class MindMap {
         }, 600);
     }
 
-    copyForest(nodes: INode[]): string { return serializeForest(nodes.map(node => this.grafts?.original(node) || node), this.summaries?.data(), this.relations?.snapshot(), this.grafts?.snapshot()); }
+    copyForest(nodes: INode[]): string { return serializeForest(nodes, this.summaries?.data(), this.relations?.snapshot(), this.grafts?.snapshot()); }
 
     copyNode(node?: INode): string {
         return this.copyForest(node ? [node] : this.getSelectedRoots());

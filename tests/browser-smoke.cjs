@@ -1065,7 +1065,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.children[0].data.nodeStyle.backgroundColor),'#193c55');
         await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node]));
         console.log('Virtual branches: shared text, history and style passed; adding child.');
-        await tool('child').click();await page.waitForFunction(()=>testMap.editNode?.parent===graftTest.a);
+        await tool('child').click();await page.waitForFunction(()=>testMap.editNode?.virtualSource?.parent===graftTest.a);
         await page.keyboard.type('新增共享子节点');await page.evaluate(()=>testMap.finishEditingForHistory());
         assert.equal(await page.evaluate(()=>testMap.grafts.roots.every(root=>root.node.children.length===2)),true);
         await page.evaluate(()=>{testMap.execute('collapseNode',{node:graftTest.b});});
@@ -1101,6 +1101,34 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.locator('.mm-graft-source-line[data-source-id="graft-a"]').count(),3);
         await page.keyboard.press('Control+z');
         assert.equal(await page.locator('.mm-graft-source-line').count(),2);
+        // Fold state belongs to each occurrence, including descendant nodes.
+        const firstVirtualId=await page.evaluate(()=>testMap.grafts.roots[0].node.getId());
+        const foldButton=page.locator('[data-id="'+firstVirtualId+'"] > .mm-node-bar');
+        const projectionCount=await page.locator('.mm-virtual-node').count();
+        await foldButton.click();
+        assert.deepEqual(await page.evaluate(()=>[graftTest.a.isExpand,...testMap.grafts.roots.map(root=>root.node.isExpand)]),[true,false,true]);
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[0].node.children[0].isShow()),false);
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.children[0].isShow()),true);
+        await page.keyboard.press('Control+z');
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[0].node.isExpand),true);
+        await page.keyboard.press('Control+y');
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[0].node.isExpand),false);
+        await page.locator('[data-id="graft-a"] > .mm-node-bar').click();
+        assert.deepEqual(await page.evaluate(()=>[graftTest.a.isExpand,...testMap.grafts.roots.map(root=>root.node.isExpand)]),[false,false,true]);
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+        await page.screenshot({path:path.join(screenshotDir,'independent-virtual-folds.png')});
+        const independentState=await page.evaluate(()=>extractGrafts(testMap.getMarkdown()).entries);
+        await page.evaluate(entries=>{testMap.grafts.clear();testMap.grafts=new GraftManager(testMap);testMap.grafts.load(entries);testMap.refresh();},independentState);
+        assert.deepEqual(await page.evaluate(()=>[graftTest.a.isExpand,...testMap.grafts.roots.map(root=>root.node.isExpand)]),[false,false,true]);
+        assert.equal(await page.locator('.mm-virtual-node').count(),projectionCount,'Independent folds reuse the same number of DOM nodes');
+        // Adding while the source remains collapsed edits in the visible virtual occurrence.
+        await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node]));
+        await tool('child').click();await page.waitForFunction(()=>testMap.editNode?.virtualSource?.parent===graftTest.a);
+        assert.equal(await page.evaluate(()=>graftTest.a.isExpand),false);
+        assert.equal(await page.evaluate(()=>testMap.editNode.isShow()),true);
+        await page.keyboard.type('独立折叠下的共享内容');await page.evaluate(()=>testMap.finishEditingForHistory());
+        assert.equal(await page.evaluate(()=>graftTest.a.children.at(-1).data.text),'独立折叠下的共享内容');
+        console.log('Independent virtual folds: actual fold controls, source/copy isolation, undo/redo, persisted reload, unchanged DOM count and adding while the source is collapsed passed.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

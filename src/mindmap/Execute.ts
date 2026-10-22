@@ -7,6 +7,7 @@ import INode from './INode'
 interface DataProps {
     node?:INode,
     parent?:INode,
+    virtualParent?:INode,
     oldParent?:INode,
 
     //change node text
@@ -48,6 +49,7 @@ export default class Exec{
                     var parent:INode = data.parent;
                     var node = new INode(d,parent.mindmap);
                     const command = new cmd.AddNode(node, data.parent, parent.mindmap);
+                    command.virtualParent = data.virtualParent;
                     if (data.index !== undefined) command.index = data.index;
                     this.history.execute(command);
                     l_return = node;
@@ -95,7 +97,7 @@ export default class Exec{
                 }
             break
             case 'pasteNode':
-                this.history.execute(new cmd.PasteNode(data.node,data.data));
+                this.history.execute(new cmd.PasteNode(data.node,data.data,data.virtualParent));
                 break;
             case 'removeNodes':
                 this.history.execute(new cmd.RemoveNodes(data.nodes));

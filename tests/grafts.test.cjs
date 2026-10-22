@@ -8,8 +8,9 @@ class Node{
  constructor(data,map){this.data=data;this.mindmap=map;this.children=[];this.isExpand=true;this.containEl={classList:{add(){},remove(){}},setAttribute(){},remove(){this.removed=true},focus(){}};this.contentEl={};}
  getId(){return this.data.id}getData(){return{...this.data}}getLevel(){return this.parent?this.parent.getLevel()+1:0}
  refreshBox(){}clearCacheData(){}setPosition(){}setText(text){this.data.text=text}show(){this.isHide=false}hide(){this.isHide=true}isShow(){return !this.isHide}
- expand(){this.isExpand=true}collapse(){this.isExpand=false}select(preserve=false){if(!preserve)this.mindmap.setSelectedNodes([this]);this.mindmap.selectNode=this}unSelect(){}cancelEdit(){this.data.isEdit=false}
+ expand(){if(this.virtualSource)this.mindmap.grafts.rememberExpansion(this,true);this.isExpand=true}collapse(){if(this.virtualSource)this.mindmap.grafts.rememberExpansion(this,false);this.isExpand=false}select(preserve=false){if(!preserve)this.mindmap.setSelectedNodes([this]);this.mindmap.selectNode=this}unSelect(){}cancelEdit(){this.data.isEdit=false}
  addChild(n,index=-1){this.children.splice(index<0?this.children.length:index,0,n);n.parent=this}removeChild(n){const i=this.children.indexOf(n);this.children.splice(i,1);return i}
+ edit(){this._oldText=this.data.text;this.data.isEdit=true;this.contentEl.innerText=this.data.text;this.mindmap.editNode=this}
 }
 const commands=load('src/mindmap/Cmds.ts',{'./selection':selection,'./INode':{default:Node}});
 const History=load('src/mindmap/History.ts').default;
@@ -56,7 +57,7 @@ test('edits through any projected node update the source, all references and glo
  assert.equal(a1.data.text,'Changed');assert.equal(map.grafts.roots[1].node.children[0].data.text,'Changed');assert.equal(map.exec.history.undos.length,count+1);
  map.undo();assert.equal(a1.data.text,'A1');assert.equal(mirror.data.text,'A1');map.redo();assert.equal(mirror.data.text,'Changed');
  const added=new Node({id:uuid(),text:'New'},map);a.addChild(added);map.refresh();assert.equal(map.grafts.roots[1].node.children.length,2);
- a.collapse();map.refresh();assert.equal(map.grafts.roots[0].node.children[0].isShow(),false);
+ a.collapse();map.refresh();assert.equal(map.grafts.roots[0].node.children[0].isShow(),true);
  a.expand();b.collapse();map.refresh();assert.equal(map.grafts.roots[0].node.isShow(),false);assert.equal(map.grafts.roots[1].node.isShow(),true);
 });
 test('deleting a projected root detaches only that reference; deleting a source cascades atomically and undo restores',()=>{
@@ -82,4 +83,55 @@ test('copying a forest remaps internal grafts; copying a projection creates inde
  assert.equal(clip.parseSubtree(JSON.stringify({type:'copyNodes',text:[{id:'a',pid:null,text:'A'},{id:'b',pid:'a',text:'B'}],grafts:[{id:'r',source:'a',target:'b'}]}),uuid),null);
  const copied=JSON.parse(map.copyForest([map.grafts.roots[0].node]));assert.equal(copied.text[0].text,'A');assert.equal(copied.text.length,2);assert.equal(copied.grafts,undefined);
  map.execute('pasteNode',{node:map.root,data});assert.equal(map.grafts.items.length,2);map.undo();assert.equal(map.grafts.items.length,1);map.redo();assert.equal(map.grafts.items.length,2);
+});
+
+test('source, each projection and descendants fold independently with deep history snapshots and persistence',()=>{
+ const {map,a,a1,b,c,add}=fixture();const leaf=add('Leaf',a1);
+ map.grafts.create(a.getId(),b.getId());map.grafts.create(a.getId(),c.getId());
+ const first=map.grafts.roots[0].node,second=map.grafts.roots[1].node,count=map.grafts.nodes.size;
+ map.execute('collapseNode',{node:first});assert.equal(first.isExpand,false);assert.equal(second.isExpand,true);assert.equal(a.isExpand,true);
+ assert.equal(first.children[0].isShow(),false);assert.equal(second.children[0].isShow(),true);
+ const frozen=map.grafts.snapshot();map.execute('expandNode',{node:first});assert.equal(frozen[0].folds.find(f=>f.node===a.getId()).expanded,false);
+ map.undo();assert.equal(first.isExpand,false);map.redo();assert.equal(first.isExpand,true);
+ map.execute('collapseNode',{node:second.children[0]});assert.equal(a1.isExpand,true);assert.equal(first.children[0].isExpand,true);
+ assert.equal(second.children[0].children[0].isShow(),false);assert.equal(first.children[0].children[0].isShow(),true);
+ map.execute('collapseNode',{node:a});assert.equal(first.isExpand,true);assert.equal(second.isExpand,true);
+ assert.equal(first.children[0].children[0].isShow(),true);
+ const raw=map.getMarkdown();assert.ok(raw.includes(`"node":"${a1.getId()}"`));assert.ok(raw.includes(`mm:node {"id":"${leaf.getId()}"}`));
+ const saved=model.extractGrafts(raw).entries;map.grafts.clear();map.grafts.load(saved);map.refresh();
+ assert.equal(map.grafts.roots[0].node.isExpand,true);assert.equal(map.grafts.roots[1].node.children[0].isExpand,false);assert.equal(a.isExpand,false);
+ assert.equal(map.grafts.nodes.size,count,'Fold changes reuse existing projected nodes');
+ map.setSelectedNodes([map.grafts.roots[1].node]);map.grafts.removeSelected();map.undo();
+ assert.equal(map.grafts.roots.find(root=>root.target===c).node.children[0].isExpand,false);
+ const copied=JSON.parse(map.copyForest([map.grafts.roots.find(root=>root.target===c).node]));
+ assert.equal(copied.text[0].expanded,true);assert.equal(copied.text[1].expanded,false);
+});
+
+test('legacy references inherit folds once and nested instances keep separate fold paths',()=>{
+ const {map,a,a1,b,c}=fixture();a.collapse();
+ map.grafts.load([{id:'legacy',source:a.getId(),target:b.getId()}]);map.refresh();
+ assert.equal(map.grafts.roots[0].node.isExpand,false);a.expand();map.refresh();assert.equal(map.grafts.roots[0].node.isExpand,false);
+ map.execute('expandNode',{node:map.grafts.roots[0].node});map.grafts.create(a.getId(),c.getId());
+ map.grafts.create(c.getId(),b.getId());
+ const outer=map.grafts.roots.find(root=>root.node.virtualSource===c).node,nested=outer.children[0];
+ map.execute('collapseNode',{node:nested});
+ assert.equal(nested.isExpand,false);assert.equal(a.isExpand,true);assert.equal(map.grafts.roots.find(root=>root.target===c).node.isExpand,true);
+ const raw=map.grafts.markdown(),parsed=model.extractGrafts(raw);assert.equal(parsed.preserved,'');
+ assert.ok(parsed.entries.some(link=>link.folds.some(fold=>fold.path.length===1&&fold.node===a.getId()&&fold.expanded===false)));
+ const data=clip.parseSubtree(map.copyForest([a,b,c]),uuid),ids=new Set(data.grafts.map(link=>link.id));
+ assert.ok(data.grafts.some(link=>link.folds.some(fold=>fold.path.length===1&&ids.has(fold.path[0])&&!fold.expanded)));
+ for(const folds of [[{node:a.getId(),path:[],expanded:'no'}],[{node:a.getId(),path:[],expanded:false},{node:a.getId(),path:[],expanded:true}]])
+  assert.throws(()=>model.validateGrafts([{id:'bad',source:a.getId(),target:b.getId(),folds}]));
+});
+
+test('adding and pasting through a projection opens only that projection and preserves source folds on undo',async()=>{
+ const {map,a,b,c}=fixture();a.collapse();map.grafts.create(a.getId(),b.getId());map.grafts.create(a.getId(),c.getId());
+ const first=map.grafts.roots[0].node,second=map.grafts.roots[1].node;
+ map.execute('addChildNode',{parent:first});await new Promise(resolve=>setTimeout(resolve,5));
+ assert.equal(a.isExpand,false);assert.equal(first.isExpand,true);assert.equal(second.isExpand,false);assert.equal(map.editNode.virtualSource,a.children[1]);
+ map.finishEditingForHistory();map.undo();assert.equal(first.isExpand,false);assert.equal(a.children.length,1);map.redo();await new Promise(resolve=>setTimeout(resolve,5));
+ map.finishEditingForHistory();map.execute('collapseNode',{node:first});
+ map.execute('pasteNode',{node:first,data:clip.parseSubtree(map.copyForest([a.children[0]]),uuid)});
+ assert.equal(first.isExpand,true);assert.equal(second.isExpand,false);assert.equal(a.isExpand,false);
+ map.undo();assert.equal(first.isExpand,false);assert.equal(a.isExpand,false);
 });

@@ -4,7 +4,7 @@ import { applyNodeStyle } from '../nodeStyles';
 import { Notice } from 'obsidian';
 import { uuid } from '../MindMapView';
 import { t } from '../lang/helpers';
-import { GraftData, graftsMarkdown, validGraftGraph } from './model';
+import { GraftData, graftsMarkdown, validGraftGraph, validateGrafts } from './model';
 import { relationCurve } from '../relations/model';
 
 /** References are durable; projected nodes and their visual parents are runtime only. */
@@ -33,10 +33,10 @@ export default class GraftManager {
         this.map.summaries?.all((node: any) => nodes.push(node));
         return nodes;
     }
-    snapshot() { return this.items.map(item => ({ ...item })); }
-    restore(items: GraftData[]) { this.items = items.map(item => ({ ...item })); this.pending = ''; this.markers(); }
+    snapshot() { return validateGrafts(this.items); }
+    restore(items: GraftData[]) { this.items = validateGrafts(items); this.pending = ''; this.markers(); }
     load(entries: GraftData[], preserved = '', original = '') {
-        this.items = entries.map(item => ({ ...item })); this.preserved = preserved;
+        this.items = validateGrafts(entries); this.preserved = preserved;
         if (!validGraftGraph(this.originals(), this.items)) {
             this.preserved = original || graftsMarkdown(entries); this.items = [];
         }
@@ -44,7 +44,7 @@ export default class GraftManager {
         this.markers();
     }
     markers() {
-        const ids = new Set<string>(); this.items.forEach(item => { ids.add(item.source); ids.add(item.target); });
+        const ids = new Set<string>(); this.items.forEach(item => { ids.add(item.source); ids.add(item.target); item.folds?.forEach(fold => ids.add(fold.node)); });
         this.originals().forEach(node => {
             if (this.preserved || ids.has(node.getId())) node.data.graftMember = true;
             else delete node.data.graftMember;
@@ -102,6 +102,14 @@ export default class GraftManager {
         return true;
     }
     markdown() { return this.preserved || graftsMarkdown(this.items); }
+    rememberExpansion(node: Node, expanded: boolean) {
+        const item = this.items.find(link => link.id === node.virtualGraft);
+        if (!item || !node.virtualSource) return;
+        const path = node.virtualPath || [], key = JSON.stringify([...path, node.virtualSource.getId()]);
+        const fold = (item.folds || (item.folds = [])).find(fold => JSON.stringify([...fold.path, fold.node]) === key);
+        if (fold) fold.expanded = expanded;
+        else item.folds.push({ path: path.slice(), node: node.virtualSource.getId(), expanded });
+    }
     all(callback: (node: Node) => void) { if (!this.attached) this.nodes.forEach(callback); }
     sync() {
         const byId = new Map(this.originals().map(node => [node.getId(), node]));
@@ -111,7 +119,9 @@ export default class GraftManager {
             if (node.virtualPreview && node !== editingSource) { node.virtualPreview = false; node.parseText(); }
         });
         const used = new Set<string>(); this.roots = [];
-        const build = (source: Node, parent: Node, link: GraftData, path: string, root = false): Node => {
+        const states = new Map(this.items.map(link => [link.id, new Map((link.folds || []).map(fold => [JSON.stringify([...fold.path, fold.node]), fold]))]));
+        const usedFolds = new Map(this.items.map(link => [link.id, new Set<string>()]));
+        const build = (source: Node, parent: Node, link: GraftData, path: string, root = false, chain: string[] = []): Node => {
             const id = `virtual:${path}:${source.getId()}`;
             let mirror = this.nodes.get(id);
             if (!mirror) {
@@ -122,6 +132,7 @@ export default class GraftManager {
                 this.nodes.set(id, mirror); this.map.contentEL.appendChild(mirror.containEl);
             }
             used.add(id); mirror.virtualSource = source; mirror.virtualGraft = link.id; mirror.virtualRoot = root; mirror.parent = parent;
+            mirror.virtualPath = chain;
             if (!mirror.data.isEdit) {
                 const changed = mirror.data.text !== source.data.text || JSON.stringify(mirror.data.nodeStyle) !== JSON.stringify(source.data.nodeStyle) || mirror.data.stylePreset !== source.data.stylePreset;
                 mirror.data.text = source.data.text; mirror.data.nodeStyle = source.data.nodeStyle; mirror.data.stylePreset = source.data.stylePreset;
@@ -130,10 +141,13 @@ export default class GraftManager {
                 }
                 applyNodeStyle(mirror, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
             }
-            mirror.isExpand = source.isExpand;
-            mirror.children = source.children.map(child => build(child, mirror!, link, path));
+            const key = JSON.stringify([...chain, source.getId()]), folds = states.get(link.id)!;
+            if (!folds.has(key)) folds.set(key, { path: chain.slice(), node: source.getId(), expanded: source.isExpand });
+            usedFolds.get(link.id)!.add(key);
+            mirror.isExpand = folds.get(key)!.expanded;
+            mirror.children = source.children.map(child => build(child, mirror!, link, path, false, chain));
             this.items.filter(item => item.target === source.getId()).forEach(item => {
-                const nested = byId.get(item.source); if (nested) mirror!.children.push(build(nested, mirror!, link, path + ':' + item.id));
+                const nested = byId.get(item.source); if (nested) mirror!.children.push(build(nested, mirror!, link, path + ':' + item.id, false, [...chain, item.id]));
             });
             mirror.refreshBox(); mirror.clearCacheData(); return mirror;
         };
@@ -142,6 +156,8 @@ export default class GraftManager {
             const source = byId.get(link.source), target = byId.get(link.target);
             if (source && target) this.roots.push({ link, node: build(source, target, link, link.id, true), target });
         });
+        if (renderable) this.items.forEach(link => { link.folds = Array.from(states.get(link.id)!.entries()).filter(([key]) => usedFolds.get(link.id)!.has(key)).map(([, fold]) => fold); });
+        this.markers();
         const visibility = (node: Node, visible: boolean) => {
             if (visible) node.show(); else node.hide();
             node.children.forEach(child => visibility(child, visible && node.isExpand));

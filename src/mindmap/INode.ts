@@ -59,6 +59,7 @@ export default class Node {
     virtualSource?: Node;
     virtualGraft?: string;
     virtualRoot?: boolean;
+    virtualPath?: string[];
     virtualPreview?: boolean;
     containEl:HTMLElement;
     contentEl:HTMLElement;
@@ -804,6 +805,7 @@ export default class Node {
     }
 
     expand(){
+        if (this.virtualSource) this.mindmap.grafts?.rememberExpansion(this, true);
         this.isExpand =true;
         function show(node:Node) {
             node.show();
@@ -822,6 +824,7 @@ export default class Node {
     }
 
     collapse(){
+        if (this.virtualSource) this.mindmap.grafts?.rememberExpansion(this, false);
 
         this.isExpand = false;
         function hide(node:Node) {

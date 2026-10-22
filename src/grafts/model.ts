@@ -1,14 +1,28 @@
-export interface GraftData { id: string; source: string; target: string }
+export interface GraftFold { path: string[]; node: string; expanded: boolean }
+export interface GraftData { id: string; source: string; target: string; folds?: GraftFold[] }
 
 export function validateGrafts(value: any): GraftData[] {
     if (!Array.isArray(value) || value.length > 1000) throw Error('Invalid grafts');
     const ids = new Set<string>(), pairs = new Set<string>();
     return value.map(item => {
-        if (!item || Object.keys(item).some(key => !['id', 'source', 'target'].includes(key)) ||
+        if (!item || Object.keys(item).some(key => !['id', 'source', 'target', 'folds'].includes(key)) ||
             ['id', 'source', 'target'].some(key => typeof item[key] !== 'string' || !/^[\w-]{1,128}$/.test(item[key])) ||
             item.source === item.target || ids.has(item.id) || pairs.has(item.source + ':' + item.target)) throw Error('Invalid graft');
         ids.add(item.id); pairs.add(item.source + ':' + item.target);
-        return { id: item.id, source: item.source, target: item.target };
+        let folds: GraftFold[] | undefined;
+        if (item.folds !== undefined) {
+            if (!Array.isArray(item.folds) || item.folds.length > 10000) throw Error('Invalid virtual folds');
+            const keys = new Set<string>();
+            folds = item.folds.map((fold: any) => {
+                if (!fold || Object.keys(fold).some(key => !['path', 'node', 'expanded'].includes(key)) ||
+                    typeof fold.node !== 'string' || !/^[\w-]{1,128}$/.test(fold.node) || typeof fold.expanded !== 'boolean' ||
+                    !Array.isArray(fold.path) || fold.path.length > 1000 || fold.path.some((id: any) => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id))) throw Error('Invalid virtual fold');
+                const key = JSON.stringify([...fold.path, fold.node]);
+                if (keys.has(key)) throw Error('Duplicate virtual fold');
+                keys.add(key); return { path: fold.path.slice(), node: fold.node, expanded: fold.expanded };
+            });
+        }
+        return { id: item.id, source: item.source, target: item.target, ...(folds ? { folds } : {}) };
     });
 }
 

@@ -23,6 +23,7 @@ export abstract class Command {
 }
 
 export class AddNode extends Command {
+    virtualParent?: INode;
     node:INode;
     parent:INode = null;
     mind:MindMap =null;
@@ -35,6 +36,7 @@ export class AddNode extends Command {
         this.mind = mind||this.node.mindmap;
     }
     execute():boolean {
+        if (this.virtualParent) this.virtualParent.expand();
         if (this.index > -1) {
             this.mind.addNode(this.node, this.parent, this.index);   //add node to position of parent children
         } else {
@@ -46,8 +48,10 @@ export class AddNode extends Command {
         clearTimeout(this.editTimer);
         this.editTimer = setTimeout(()=>{
             if (this.mind.getNodeById(this.node.getId()) !== this.node) return;
-            this.node.select();
-            this.node.edit();
+            const parent = this.virtualParent && this.mind.getNodeById(this.virtualParent.getId());
+            const editor = parent?.children.find(child => child.virtualSource === this.node) || this.node;
+            editor.select();
+            editor.edit();
         },0);
         return true; //exit with no error
     }
@@ -304,7 +308,7 @@ export class ExpandNode extends Command{
     firstNode: INode;
     firstNodes: INode[] = [];
     wasExpanded: boolean;
-    constructor(node: INode, data: any[]) {
+    constructor(node: INode, data: any[], public virtualParent?: INode) {
         super('pasteNode');
         this.node = node;
         this.data = data;
@@ -314,7 +318,8 @@ export class ExpandNode extends Command{
 
     execute(): boolean {
         this.firstNodes = [];
-        if (!this.node.isExpand) this.node.expand();
+        if (this.virtualParent) this.virtualParent.expand();
+        else if (!this.node.isExpand) this.node.expand();
         const nodes = new Map<string, INode>();
         const collapsed: INode[] = [];
         this.data.forEach((original: any, i: number) => {
@@ -350,7 +355,7 @@ export class ExpandNode extends Command{
                 selected = selected.parent;
             }
             this.firstNodes.forEach(node => this.mind.removeNode(node));
-            if (!this.wasExpanded) this.node.collapse();
+            if (!this.wasExpanded && !this.virtualParent) this.node.collapse();
             this.node.clearCacheData();
             this.refresh();
         }

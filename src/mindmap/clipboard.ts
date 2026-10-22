@@ -74,9 +74,12 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
             });
         }
         if (payload.grafts !== undefined) {
-            (result as any).grafts = validateGrafts(payload.grafts).map(link => {
+            const grafts = validateGrafts(payload.grafts), references = new Map(grafts.map(link => [link.id, createId()]));
+            (result as any).grafts = grafts.map(link => {
                 if (!ids.has(link.source) || !ids.has(link.target)) throw Error('Invalid virtual branch clipboard references');
-                return { id: createId(), source: ids.get(link.source), target: ids.get(link.target) };
+                const folds = link.folds?.filter(fold => ids.has(fold.node) && fold.path.every(id => references.has(id)))
+                    .map(fold => ({ path: fold.path.map(id => references.get(id)), node: ids.get(fold.node), expanded: fold.expanded }));
+                return { id: references.get(link.id), source: ids.get(link.source), target: ids.get(link.target), ...(folds ? { folds } : {}) };
             });
             // Reject cycles before allocating/mounting any graph nodes.
             const edges = new Map<string, string[]>();
