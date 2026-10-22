@@ -83,7 +83,7 @@ test('copy includes hidden descendants and preserves Markdown without changing t
     const before = JSON.stringify(node.data);
     const copied = JSON.parse(clipboard.serializeSubtree(node)).text;
     assert.equal(copied.length, 3);
-    assert.equal(copied[0].isExpand, false);
+    assert.equal(copied[0].isExpand, undefined);assert.equal(copied[0].expanded, undefined);
     assert.equal(copied[0].isRoot, false);
     assert.equal(copied[0].mdText, '**Topic**');
     assert.equal(copied[1].text, node.children[0].data.text);
@@ -96,7 +96,7 @@ test('repeated cross-map paste creates independent subtrees, and undo/redo retai
     assert.equal(map.pasteNode(text), true);
     const first = map.root.children[0];
     assert.equal(first.children[0].children[0].data.text, 'Grandchild');
-    assert.equal(first.isExpand, false);
+    assert.equal(first.isExpand, true);
     assert.equal(map.root.isExpand, true);
     const command = map.command;
     command.undo();
@@ -117,7 +117,7 @@ test('repeated cross-map paste creates independent subtrees, and undo/redo retai
     assert.match(markdown, /console\.log\(1\)/);
     assert.match(markdown, /\| A \| B \|/);
     assert.equal((markdown.match(/Grandchild/g) || []).length, 2);
-    assert.ok(markdown.includes(`^${second.getId()}`));
+    assert.ok(!markdown.includes(`^${second.getId()}`));
 });
 
 test('only the active map handles node clipboard keyboard shortcuts', () => {
@@ -251,7 +251,7 @@ test('batch copy excludes selected descendants and paste/undo/redo retains separ
     const other = keyboardFixture();
     other.pasteNode(text);
     assert.equal(other.root.children.length, 2);
-    assert.equal(other.root.children[0].isExpand, false);
+    assert.equal(other.root.children[0].isExpand, true);
     assert.equal(other.root.children[0].children[0].data.text, 'A-child');
     assert.equal(other.exec.history.undos.length, 1);
     other.root.children[1].select();
@@ -656,7 +656,7 @@ test('Ctrl/Cmd+X cuts selected subtrees once, pastes intact and supports undo/re
         map.setSelectedNodes([target]);
         map.pasteNode(text);
         assert.deepEqual(target.children.map(n => n.data.text), ['A', 'B']);
-        assert.equal(target.children[0].isExpand, false);
+        assert.equal(target.children[0].isExpand, true);
         assert.equal(target.children[0].children[0].data.text, '**Child**');
         press(map, 'z', { ctrlKey: true });
         assert.equal(target.children.length, 0);

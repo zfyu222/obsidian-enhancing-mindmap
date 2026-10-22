@@ -18,17 +18,20 @@ export function serializeForest(nodes: any[], summaries: any[] = [], relations: 
         d.pid = pid;
         d.isRoot = false;
         d.isEdit = false;
-        d.isExpand = current.isExpand;
-        d.expanded = current.isExpand;
+        delete d.isExpand; delete d.expanded;
         data.push(d);
         current.children.forEach((child: any) => visit(child, d.id));
     };
     roots.forEach(node => visit(node, null));
     const copiedIds = new Set(data.map(d=>d.id));
-    const included = summaries.filter(s=>!copiedIds.has(s.root.id) && s.memberIds.every((id: string)=>copiedIds.has(id)));
+    const withoutFolds = (node: any): any => {
+        const data = {...node}; delete data.expanded; delete data.isExpand;
+        data.children = (node.children || []).map(withoutFolds); return data;
+    };
+    const included = summaries.filter(s=>!copiedIds.has(s.root.id) && s.memberIds.every((id: string)=>copiedIds.has(id))).map(s => ({...s, root: withoutFolds(s.root)}));
     const collect=(n:any)=>{copiedIds.add(n.id);(n.children||[]).forEach(collect);};included.forEach(s=>collect(s.root));
     const links=relations.filter(link=>copiedIds.has(link.from)&&copiedIds.has(link.to));
-    const references = grafts.filter(link => copiedIds.has(link.source) && copiedIds.has(link.target));
+    const references = grafts.filter(link => copiedIds.has(link.source) && copiedIds.has(link.target)).map(({id, source, target}) => ({id, source, target}));
     return JSON.stringify({ ...(references.length ? {grafts:references} : {}), ...(links.length ? {relations:links} : {}), type: roots.length === 1 ? 'copyNode' : 'copyNodes', text: data, ...(included.length ? {summaries:included} : {}) });
 }
 
@@ -48,7 +51,7 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
         }
         if (!roots || (payload.type === 'copyNode' && roots !== 1)) return null;
         const result = payload.text.map((d: any, i: number) => {
-            const result = { ...d, id: ids.get(d.id), pid: d.pid == null ? null : ids.get(d.pid), isRoot: false, isEdit: false };
+            const result = { ...d, id: ids.get(d.id), pid: d.pid == null ? null : ids.get(d.pid), isRoot: false, isEdit: false, expanded: true, isExpand: true };
             delete result.children;
             delete result.summaryRoot; delete result.summaryTree; delete result.summaryMember; delete result.relationMember; delete result.graftMember;
             return result;
@@ -59,7 +62,7 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
             const copyTree = (node: any, depth = 0): any => {
                 if (depth > 100 || !node || typeof node.id !== 'string' || typeof node.text !== 'string' || (used.has(node.id) || ids.has(node.id)) || !Array.isArray(node.children)) throw Error('Invalid summary clipboard');
                 used.add(node.id); const id=createId();ids.set(node.id,id);
-                return {id,text:node.text,stylePreset:node.stylePreset,nodeStyle:node.nodeStyle,expanded:node.expanded!==false,children:node.children.map((child:any)=>copyTree(child,depth+1))};
+                return {id,text:node.text,stylePreset:node.stylePreset,nodeStyle:node.nodeStyle,expanded:true,children:node.children.map((child:any)=>copyTree(child,depth+1))};
             };
             (result as any).summaries = payload.summaries.map((summary:any)=>{
                 if (!summary || !Array.isArray(summary.memberIds) || !summary.memberIds.length || summary.memberIds.some((id:string)=>!ids.has(id))) throw Error('Invalid summary clipboard references');
@@ -77,9 +80,7 @@ export function parseSubtree(text: string, createId: () => string): any[] | null
             const grafts = validateGrafts(payload.grafts), references = new Map(grafts.map(link => [link.id, createId()]));
             (result as any).grafts = grafts.map(link => {
                 if (!ids.has(link.source) || !ids.has(link.target)) throw Error('Invalid virtual branch clipboard references');
-                const folds = link.folds?.filter(fold => ids.has(fold.node) && fold.path.every(id => references.has(id)))
-                    .map(fold => ({ path: fold.path.map(id => references.get(id)), node: ids.get(fold.node), expanded: fold.expanded }));
-                return { id: references.get(link.id), source: ids.get(link.source), target: ids.get(link.target), ...(folds ? { folds } : {}) };
+                return { id: references.get(link.id), source: ids.get(link.source), target: ids.get(link.target) };
             });
             // Reject cycles before allocating/mounting any graph nodes.
             const edges = new Map<string, string[]>();

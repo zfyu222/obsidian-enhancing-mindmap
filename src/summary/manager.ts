@@ -43,7 +43,7 @@ export default class SummaryManager {
     createTree(data: any, summaryId: string, parent?: any): any {
         const node = new Node({ ...data, id: data.id || uuid(), children: undefined, isRoot: !parent } as any, this.map);
         node.data.summaryTree = summaryId; node.data.summaryRoot = !parent;
-        node.isExpand = data.expanded !== false;
+        node.isExpand = true;
         if (parent) { parent.children.push(node); node.parent = parent; }
         (data.children || []).forEach((d: any) => this.createTree(d, summaryId, node));
         node.setPosition(0, 0); node.refreshBox();

@@ -37,10 +37,17 @@ test('summary membership uses ancestry, parent, root side and sibling index; sin
 test('summary section round-trips independent trees, empty nodes, folding, paragraphs, code, tables and embeds',()=>{
  const root={id:'s',text:'Conclusion\n\nParagraph',expanded:false,children:[{id:'c1',text:'```js\n- literal list\nconst x=1;\n```',expanded:true,children:[]},{id:'c2',text:'| A | B |\n|---|---|\n| 1 | 2 |\n\n![[Assets/image.png]]',expanded:true,children:[{id:'c3',text:'',expanded:false,children:[]}]}]};
  const entries=[{id:'s',memberIds:['a','b'],root}];const section=markdown.summaryMarkdown(entries),document='# Main\n- A\n\n'+section;
- const parsed=markdown.extractSummaries(document);assert.equal(parsed.main,'# Main\n- A');assert.equal(parsed.error,'');assert.deepEqual(json(parsed.entries),entries);
+ const parsed=markdown.extractSummaries(document);assert.equal(parsed.main,'# Main\n- A');assert.equal(parsed.error,'');
+ const expanded=json(entries);const open=node=>{node.expanded=true;node.children.forEach(open)};expanded.forEach(entry=>open(entry.root));assert.deepEqual(json(parsed.entries),expanded);assert.ok(!section.includes('expanded'));
  assert.equal(markdown.summaryMarkdown(parsed.entries),section);
  const marker=markdown.readNodeMarker('A <!-- mm:node {"id":"stable"} -->');assert.equal(marker.id,'stable');assert.equal(marker.text,'A');
 });
+test('legacy summary fold fields load expanded and are removed from serialized metadata',()=>{
+ const legacy='<!-- mm:summaries:start {"version":1} -->\n## 概括子树区\n\n### Summary <!-- mm:summary {"id":"s","members":["a"],"expanded":false} -->\n- Child <!-- mm:item {"id":"c","expanded":false} -->\n\n<!-- mm:summaries:end -->';
+ const parsed=markdown.extractSummaries(legacy);assert.equal(parsed.error,'');assert.equal(parsed.entries[0].root.expanded,true);assert.equal(parsed.entries[0].root.children[0].expanded,true);
+ const saved=markdown.summaryMarkdown(parsed.entries);assert.ok(!saved.includes('expanded'));assert.ok(saved.includes('"members":["a"]'));assert.ok(saved.includes('"id":"c"'));
+});
+
 test('damaged or future summary sections preserve all original bytes',()=>{
  for(const raw of ['<!-- mm:summaries:start {"version":9} -->\nunknown','<!-- mm:summaries:start {"version":1} -->\n## 概括子树区\n\n### X <!-- mm:summary {"id":"s","members":[]} -->\n<!-- mm:summaries:end -->']){const parsed=markdown.extractSummaries('# Main\n'+raw);assert.equal(parsed.preserved,raw);assert.ok(parsed.error);assert.equal(parsed.entries.length,0);}
 });
@@ -99,7 +106,7 @@ test('member markers preserve code and table node identity and sibling topology'
 test('heading members preserve fenced Markdown, descendants and folded identity after save',()=>{
  const {map,a,b,add}=fixture();a.data.text='```md\n<!-- mm:node {"id":"literal"} -->\n```';b.data.text='| A | B |\n|---|---|\n| 1 | 2 |';add('Descendant',a);a.isExpand=false;map.setSelectedNodes([a,b]);map.summaries.create();map.finishEditingForHistory();map.setting.headLevel=2;
  const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{}},'./markmapLib/markmap-lib':parser,'./summary/markdown':markdown}).MindMapView;
- const text=markdown.extractSummaries(map.getMarkdown()).main;const data=View.prototype.mdToData.call({},text);assert.equal(data.children.length,3);assert.equal(data.children[0].id,a.getId());assert.equal(data.children[0].expanded,false);assert.equal(data.children[0].text,a.data.text);assert.equal(data.children[0].children[0].text,'Descendant');assert.equal(data.children[1].text,b.data.text);
+ const text=markdown.extractSummaries(map.getMarkdown()).main;const data=View.prototype.mdToData.call({},text);assert.equal(data.children.length,3);assert.equal(data.children[0].id,a.getId());assert.equal(data.children[0].expanded,true);assert.equal(data.children[0].text,a.data.text);assert.equal(data.children[0].children[0].text,'Descendant');assert.equal(data.children[1].text,b.data.text);
 });
 
 test('multiline main content and literal block IDs in code survive without becoming collapse markers',()=>{

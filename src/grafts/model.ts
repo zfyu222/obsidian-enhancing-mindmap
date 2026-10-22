@@ -1,4 +1,5 @@
 export interface GraftFold { path: string[]; node: string; expanded: boolean }
+/** folds is legacy input / current-view undo state only; never serialized. */
 export interface GraftData { id: string; source: string; target: string; folds?: GraftFold[] }
 
 export function validateGrafts(value: any): GraftData[] {
@@ -27,7 +28,8 @@ export function validateGrafts(value: any): GraftData[] {
 }
 
 export function graftsMarkdown(items: GraftData[]) {
-    return items.length ? `<!-- mm:grafts ${JSON.stringify({ version: 1, links: items })} -->` : '';
+    const links = items.map(({id, source, target}) => ({id, source, target}));
+    return links.length ? `<!-- mm:grafts ${JSON.stringify({ version: 1, links })} -->` : '';
 }
 
 export function extractGrafts(markdown: string) {

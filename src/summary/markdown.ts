@@ -28,7 +28,7 @@ export function extractSummaries(markdown: string) {
             if (typeof meta.id !== 'string' || !/^[\w-]{1,128}$/.test(meta.id) || ids.has(meta.id) || !Array.isArray(meta.members) || !meta.members.length || meta.members.some((id: any) => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) || new Set(meta.members).size !== meta.members.length) throw Error('Invalid summary references');
             if (Object.keys(meta).some(key=>!['id','members','expanded'].includes(key))) throw Error('Unknown summary metadata');
             ids.add(meta.id);
-            const root: any = { id: meta.id, text: readStyleMarker(header[1]).text, stylePreset: readStyleMarker(header[1]).name, nodeStyle: readStyleMarker(header[1]).overrides, expanded: meta.expanded !== false, children: [] };
+            const root: any = { id: meta.id, text: readStyleMarker(header[1]).text, stylePreset: readStyleMarker(header[1]).name, nodeStyle: readStyleMarker(header[1]).overrides, expanded: true, children: [] };
             const stack: any[] = [root];
             let current = root, fence = /^\s*(```|~~~)/.test(root.text);
             for (const line of lines) {
@@ -41,7 +41,7 @@ export function extractSummaries(markdown: string) {
                     if (info.id && (typeof info.id !== 'string' || !/^[\w-]{1,128}$/.test(info.id) || ids.has(info.id))) throw Error('Duplicate summary node ID');
                     if (info.id) ids.add(info.id);
                     if (Object.keys(info).some(key=>!['id','expanded'].includes(key))) throw Error('Unknown summary node metadata');
-                    const node: any = { id: info.id || '', text: readStyleMarker(item[2]).text, stylePreset: readStyleMarker(item[2]).name, nodeStyle: readStyleMarker(item[2]).overrides, expanded: info.expanded !== false, children: [] };
+                    const node: any = { id: info.id || '', text: readStyleMarker(item[2]).text, stylePreset: readStyleMarker(item[2]).name, nodeStyle: readStyleMarker(item[2]).overrides, expanded: true, children: [] };
                     stack[depth].children.push(node); stack[depth + 1] = node; stack.length = depth + 2;
                     current = node; fence = /^\s*(```|~~~)/.test(item[2]);
                 } else {
@@ -63,11 +63,11 @@ export function summaryMarkdown(entries: SummaryData[]): string {
     if (!entries.length) return '';
     const chunks = entries.map(entry => {
         const lines = entry.root.text.split('\n');
-        let out = `### ${lines.shift() || ''}${styleMarker(entry.root.stylePreset, entry.root.nodeStyle)} <!-- mm:summary ${JSON.stringify({ id: entry.id, members: entry.memberIds, expanded: entry.root.expanded !== false })} -->\n`;
+        let out = `### ${lines.shift() || ''}${styleMarker(entry.root.stylePreset, entry.root.nodeStyle)} <!-- mm:summary ${JSON.stringify({ id: entry.id, members: entry.memberIds })} -->\n`;
         if (lines.length) out += lines.join('\n') + '\n';
         const visit = (node: any, depth: number) => {
             const text = node.text.split('\n');
-            out += '  '.repeat(depth) + '- ' + (text.shift() || '') + (styleMarker(node.stylePreset, node.nodeStyle)) + ` <!-- mm:item ${JSON.stringify({ id: node.id, expanded: node.expanded !== false })} -->\n`;
+            out += '  '.repeat(depth) + '- ' + (text.shift() || '') + (styleMarker(node.stylePreset, node.nodeStyle)) + ` <!-- mm:item ${JSON.stringify({ id: node.id })} -->\n`;
             text.forEach((line: string) => { out += '  '.repeat(depth + 1) + line + '\n'; });
             node.children.forEach((child: any) => visit(child, depth + 1));
         };

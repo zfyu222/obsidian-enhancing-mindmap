@@ -321,7 +321,6 @@ export class ExpandNode extends Command{
         if (this.virtualParent) this.virtualParent.expand();
         else if (!this.node.isExpand) this.node.expand();
         const nodes = new Map<string, INode>();
-        const collapsed: INode[] = [];
         this.data.forEach((original: any, i: number) => {
             // INode mutates its data; keep the command payload intact for redo.
             const d = JSON.parse(JSON.stringify(original));
@@ -332,12 +331,9 @@ export class ExpandNode extends Command{
             this.mind.addNode(n, parent);
             nodes.set(d.id, n);
             if (i === 0) this.firstNode = n;
-            if (d.isExpand === false || d.expanded === false) collapsed.push(n);
             n.setPosition(0, 0);
             n.refreshBox();
         });
-        // Collapse after attaching all descendants, so they are hidden together.
-        collapsed.forEach(n => n.collapse());
         this.node.clearCacheData();
         this.refresh();
         return true;

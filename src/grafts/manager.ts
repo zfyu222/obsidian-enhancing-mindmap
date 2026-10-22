@@ -37,7 +37,8 @@ export default class GraftManager {
     snapshot() { return validateGrafts(this.items); }
     restore(items: GraftData[]) { this.items = validateGrafts(items); this.pending = ''; this.markers(); }
     load(entries: GraftData[], preserved = '', original = '') {
-        this.items = validateGrafts(entries); this.preserved = preserved;
+        // Legacy folds remain readable, but reopening always starts expanded.
+        this.items = validateGrafts(entries).map(({id, source, target}) => ({id, source, target})); this.preserved = preserved;
         if (!validGraftGraph(this.originals(), this.items)) {
             this.preserved = original || graftsMarkdown(entries); this.items = [];
         }
@@ -45,7 +46,7 @@ export default class GraftManager {
         this.markers();
     }
     markers() {
-        const ids = new Set<string>(); this.items.forEach(item => { ids.add(item.source); ids.add(item.target); item.folds?.forEach(fold => ids.add(fold.node)); });
+        const ids = new Set<string>(); this.items.forEach(item => { ids.add(item.source); ids.add(item.target); });
         this.originals().forEach(node => {
             if (this.preserved || ids.has(node.getId())) node.data.graftMember = true;
             else delete node.data.graftMember;
@@ -148,7 +149,7 @@ export default class GraftManager {
                 }
             }
             const key = JSON.stringify([...chain, source.getId()]), folds = states.get(link.id)!;
-            if (!folds.has(key)) folds.set(key, { path: chain.slice(), node: source.getId(), expanded: source.isExpand });
+            if (!folds.has(key)) folds.set(key, { path: chain.slice(), node: source.getId(), expanded: true });
             usedFolds.get(link.id)!.add(key);
             mirror.isExpand = folds.get(key)!.expanded;
             mirror.children = source.children.map(child => build(child, mirror!, link, path, false, chain));

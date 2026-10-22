@@ -1123,8 +1123,9 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
         await page.screenshot({path:path.join(screenshotDir,'independent-virtual-folds.png')});
         const independentState=await page.evaluate(()=>extractGrafts(testMap.getMarkdown()).entries);
+        assert.ok(independentState.every(link=>!('folds' in link)));
         await page.evaluate(entries=>{testMap.grafts.clear();testMap.grafts=new GraftManager(testMap);testMap.grafts.load(entries);testMap.refresh();},independentState);
-        assert.deepEqual(await page.evaluate(()=>[graftTest.a.isExpand,...testMap.grafts.roots.map(root=>root.node.isExpand)]),[false,false,true]);
+        assert.deepEqual(await page.evaluate(()=>[graftTest.a.isExpand,...testMap.grafts.roots.map(root=>root.node.isExpand)]),[false,true,true]);
         assert.equal(await page.locator('.mm-virtual-node').count(),projectionCount,'Independent folds reuse the same number of DOM nodes');
         // Adding while the source remains collapsed edits in the visible virtual occurrence.
         await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node]));
@@ -1133,7 +1134,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>testMap.editNode.isShow()),true);
         await page.keyboard.type('独立折叠下的共享内容');await page.evaluate(()=>testMap.finishEditingForHistory());
         assert.equal(await page.evaluate(()=>graftTest.a.children.at(-1).data.text),'独立折叠下的共享内容');
-        console.log('Independent virtual folds: actual fold controls, source/copy isolation, undo/redo, persisted reload, unchanged DOM count and adding while the source is collapsed passed.');
+        console.log('View-only folds: actual controls, source/copy isolation, undo/redo, reload expanded without saved folds, unchanged DOM count and adding while source is collapsed passed.');
         // Production nodes cache content dimensions; dynamic DOM reads mask hidden-node regressions.
         await page.evaluate(()=>{
             const map=testMap;map.grafts.clear();window.cachedGraftGeometry=true;

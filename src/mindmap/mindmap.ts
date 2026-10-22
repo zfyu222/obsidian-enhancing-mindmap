@@ -217,7 +217,6 @@ export default class MindMap {
         var data = this.data;
         var x = this.setting.canvasSize / 2 - 60;
         var y = this.setting.canvasSize / 2 - 200;
-        var waitCollapseNodes:INode[]=[];
 
         function initNode(d: INodeData, isRoot: boolean, p?: INode) {
             that._nodeNum++;
@@ -242,9 +241,6 @@ export default class MindMap {
 
             n.refreshBox();
 
-            if(!d.expanded){
-                waitCollapseNodes.push(n)
-            }
             n.refreshBox();
             if (d.children && d.children.length) {
                 d.children.forEach((dd: INodeData) => {
@@ -254,11 +250,6 @@ export default class MindMap {
         }
         initNode(data, true);
 
-        if(waitCollapseNodes.length){
-            waitCollapseNodes.forEach(n=>{
-                n.collapse();
-            });
-        }
     }
 
     traverseBF(callback: Function, node?: INode) {
@@ -2627,7 +2618,7 @@ export default class MindMap {
         this.traverseDF((node: INode) => {
             const text: string = node.data.text.trim();
             const parts = text.split('\n');
-            const ending = (node.isExpand ? '' : ` ^${node.getId()}`) + ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + ((node.data.summaryMember || node.data.relationMember || node.data.graftMember) ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
+            const ending = ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + ((node.data.summaryMember || node.data.relationMember || node.data.graftMember) ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
             if (node.getLevel() < level) {
                 const block = /^(```|~~~|\|)/.test(text);
                 lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);

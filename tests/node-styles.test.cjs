@@ -54,7 +54,7 @@ for(const level of [0,1,2,3]) test('style names round-trip headings, empty nodes
     const text=map.getMarkdown();assert.ok(text.includes('<!-- mm:style {"name":"重点"} -->'));
     const data=View.prototype.mdToData.call({},text);
     assert.equal(data.stylePreset,'重点');assert.equal(data.text,'Main');
-    assert.equal(data.children[0].stylePreset,'重点');assert.equal(data.children[0].id,heading.getId());assert.equal(data.children[0].expanded,false);
+    assert.equal(data.children[0].stylePreset,'重点');assert.ok(data.children[0].id);assert.equal(data.children[0].expanded,true);assert.ok(!text.includes(' ^'));
     assert.equal(data.children[0].children[0].text,'');assert.equal(data.children[0].children[0].stylePreset,'重点');
     assert.equal(data.children[0].children[0].children[0].text,code.data.text);
     assert.equal(data.children[0].children[1].text,table.data.text);

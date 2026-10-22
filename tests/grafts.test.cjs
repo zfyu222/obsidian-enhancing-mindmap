@@ -38,7 +38,7 @@ test('grafts render projections without adding real children and survive Markdow
  map.grafts.withTrees(()=>assert.equal(b.children[0],mirror));assert.equal(b.children.length,0);
  assert.throws(()=>map.grafts.withTrees(()=>{throw Error('layout failure')}));assert.equal(b.children.length,0);
  const raw=map.getMarkdown();assert.equal((raw.match(/- A1/g)||[]).length,1);assert.ok(raw.includes('mm:node'));assert.ok(!raw.includes('virtual:'));
- const parsed=model.extractGrafts(raw);assert.deepEqual(json(parsed.entries),json(map.grafts.items));
+ const parsed=model.extractGrafts(raw);assert.deepEqual(json(parsed.entries),json(map.grafts.items.map(({id,source,target})=>({id,source,target}))));
  const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');
  const styles=load('src/nodeStyles.ts'),markdown=load('src/summary/markdown.ts',{'../nodeStyles':styles});
  const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{}},'./summary/markdown':markdown,'./nodeStyles':styles,'./markmapLib/markmap-lib':parser}).MindMapView;
@@ -85,7 +85,7 @@ test('copying a forest remaps internal grafts; copying a projection creates inde
  map.execute('pasteNode',{node:map.root,data});assert.equal(map.grafts.items.length,2);map.undo();assert.equal(map.grafts.items.length,1);map.redo();assert.equal(map.grafts.items.length,2);
 });
 
-test('source, each projection and descendants fold independently with deep history snapshots and persistence',()=>{
+test('source and projections fold independently in history but saved data omits all folds',()=>{
  const {map,a,a1,b,c,add}=fixture();const leaf=add('Leaf',a1);
  map.grafts.create(a.getId(),b.getId());map.grafts.create(a.getId(),c.getId());
  const first=map.grafts.roots[0].node,second=map.grafts.roots[1].node,count=map.grafts.nodes.size;
@@ -97,14 +97,23 @@ test('source, each projection and descendants fold independently with deep histo
  assert.equal(second.children[0].children[0].isShow(),false);assert.equal(first.children[0].children[0].isShow(),true);
  map.execute('collapseNode',{node:a});assert.equal(first.isExpand,true);assert.equal(second.isExpand,true);
  assert.equal(first.children[0].children[0].isShow(),true);
- const raw=map.getMarkdown();assert.ok(raw.includes(`"node":"${a1.getId()}"`));assert.ok(raw.includes(`mm:node {"id":"${leaf.getId()}"}`));
+ const raw=map.getMarkdown();assert.ok(!raw.includes('"folds"'));assert.ok(!raw.includes(`mm:node {"id":"${leaf.getId()}"}`));
  const saved=model.extractGrafts(raw).entries;map.grafts.clear();map.grafts.load(saved);map.refresh();
- assert.equal(map.grafts.roots[0].node.isExpand,true);assert.equal(map.grafts.roots[1].node.children[0].isExpand,false);assert.equal(a.isExpand,false);
+ assert.equal(map.grafts.roots[0].node.isExpand,true);assert.equal(map.grafts.roots[1].node.children[0].isExpand,true);assert.equal(a.isExpand,false);
  assert.equal(map.grafts.nodes.size,count,'Fold changes reuse existing projected nodes');
  map.setSelectedNodes([map.grafts.roots[1].node]);map.grafts.removeSelected();map.undo();
- assert.equal(map.grafts.roots.find(root=>root.target===c).node.children[0].isExpand,false);
+ assert.equal(map.grafts.roots.find(root=>root.target===c).node.children[0].isExpand,true);
  const copied=JSON.parse(map.copyForest([map.grafts.roots.find(root=>root.target===c).node]));
- assert.equal(copied.text[0].expanded,true);assert.equal(copied.text[1].expanded,false);
+ assert.equal(copied.text[0].expanded,undefined);assert.equal(copied.text[1].expanded,undefined);
+});
+
+test('folding changes only the view: main and virtual Markdown and clipboard omit fold state',()=>{
+ const {map,a,b}=fixture();map.grafts.create(a.getId(),b.getId());
+ const before=map.getMarkdown();map.execute('collapseNode',{node:a});map.execute('collapseNode',{node:map.grafts.roots[0].node});
+ assert.equal(map.getMarkdown(),before);assert.ok(!before.includes('"folds"'));assert.ok(!before.includes(' ^'));
+ const payload=JSON.parse(map.copyForest([a,b]));assert.ok(!JSON.stringify(payload).includes('"expanded"'));assert.ok(!JSON.stringify(payload).includes('"isExpand"'));assert.ok(!JSON.stringify(payload).includes('"folds"'));
+ payload.text[0].expanded=false;payload.text[0].isExpand=false;
+ const pasted=clip.parseSubtree(JSON.stringify(payload),uuid);assert.equal(pasted[0].expanded,true);assert.equal(pasted[0].isExpand,true);
 });
 
 test('visible mirrors remeasure after hidden target expansion and restored fold snapshots',()=>{
@@ -130,19 +139,19 @@ test('unchanged virtual styles avoid writes while local, preset and default muta
  map.refresh();assert.equal(mirror.styleApplies,start+7);
 });
 
-test('legacy references inherit folds once and nested instances keep separate fold paths',()=>{
+test('legacy fold data is ignored on load while nested instances keep independent view state',()=>{
  const {map,a,a1,b,c}=fixture();a.collapse();
- map.grafts.load([{id:'legacy',source:a.getId(),target:b.getId()}]);map.refresh();
- assert.equal(map.grafts.roots[0].node.isExpand,false);a.expand();map.refresh();assert.equal(map.grafts.roots[0].node.isExpand,false);
+ map.grafts.load([{id:'legacy',source:a.getId(),target:b.getId(),folds:[{path:[],node:a.getId(),expanded:false}]}]);map.refresh();
+ assert.equal(map.grafts.roots[0].node.isExpand,true);a.expand();map.refresh();assert.equal(map.grafts.roots[0].node.isExpand,true);
  map.execute('expandNode',{node:map.grafts.roots[0].node});map.grafts.create(a.getId(),c.getId());
  map.grafts.create(c.getId(),b.getId());
  const outer=map.grafts.roots.find(root=>root.node.virtualSource===c).node,nested=outer.children[0];
  map.execute('collapseNode',{node:nested});
  assert.equal(nested.isExpand,false);assert.equal(a.isExpand,true);assert.equal(map.grafts.roots.find(root=>root.target===c).node.isExpand,true);
  const raw=map.grafts.markdown(),parsed=model.extractGrafts(raw);assert.equal(parsed.preserved,'');
- assert.ok(parsed.entries.some(link=>link.folds.some(fold=>fold.path.length===1&&fold.node===a.getId()&&fold.expanded===false)));
+ assert.ok(parsed.entries.every(link=>link.folds===undefined));assert.equal(nested.isExpand,false);
  const data=clip.parseSubtree(map.copyForest([a,b,c]),uuid),ids=new Set(data.grafts.map(link=>link.id));
- assert.ok(data.grafts.some(link=>link.folds.some(fold=>fold.path.length===1&&ids.has(fold.path[0])&&!fold.expanded)));
+ assert.ok(data.grafts.every(link=>link.folds===undefined));assert.equal(ids.size,data.grafts.length);
  for(const folds of [[{node:a.getId(),path:[],expanded:'no'}],[{node:a.getId(),path:[],expanded:false},{node:a.getId(),path:[],expanded:true}]])
   assert.throws(()=>model.validateGrafts([{id:'bad',source:a.getId(),target:b.getId(),folds}]));
 });
@@ -150,6 +159,7 @@ test('legacy references inherit folds once and nested instances keep separate fo
 test('adding and pasting through a projection opens only that projection and preserves source folds on undo',async()=>{
  const {map,a,b,c}=fixture();a.collapse();map.grafts.create(a.getId(),b.getId());map.grafts.create(a.getId(),c.getId());
  const first=map.grafts.roots[0].node,second=map.grafts.roots[1].node;
+ map.execute('collapseNode',{node:first});map.execute('collapseNode',{node:second});
  map.execute('addChildNode',{parent:first});await new Promise(resolve=>setTimeout(resolve,5));
  assert.equal(a.isExpand,false);assert.equal(first.isExpand,true);assert.equal(second.isExpand,false);assert.equal(map.editNode.virtualSource,a.children[1]);
  map.finishEditingForHistory();map.undo();assert.equal(first.isExpand,false);assert.equal(a.children.length,1);map.redo();await new Promise(resolve=>setTimeout(resolve,5));

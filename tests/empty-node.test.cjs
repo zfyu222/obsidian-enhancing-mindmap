@@ -71,20 +71,26 @@ for (const headLevel of [1, 2, 3]) {
         assert.equal(data.text, ''); assert.equal(data.children.length, 3);
         const restored = data.children[0]; assert.equal(restored.text, '');
         assert.equal(restored.children[0].text, '');
-        assert.equal(restored.children[0].id, nested.data.id);
-        assert.equal(restored.children[0].expanded, false);
+        assert.ok(restored.children[0].id);
+        assert.equal(restored.children[0].expanded, true);assert.ok(!md.includes(' ^'));
         assert.equal(restored.children[0].children[0].text, 'Child');
         assert.equal(restored.children[0].children[1].text, '');
         assert.equal(data.children[1].text, ''); assert.equal(data.children[2].text, 'Sibling');
         assert.ok(!md.includes('Sub title')); assert.ok(!md.includes('<span'));
     });
 }
-test('single empty root survives serialization and collapsed root preserves ID', () => {
+test('single empty root survives serialization and reopens expanded', () => {
     const root = node(''); assert.equal(roundTrip(root, 2).data.text, '');
     root.isExpand = false;
     const { data } = roundTrip(root, 2);
-    assert.equal(data.text, ''); assert.equal(data.id, root.data.id); assert.equal(data.expanded, false);
+    assert.equal(data.text, ''); assert.ok(data.id); assert.equal(data.expanded, true);
 });
+test('legacy main-tree fold suffixes open expanded without becoming node text',()=>{
+ const view=Object.create(MindMapView.prototype),data=view.mdToData('# Root ^root\n- Parent ^parent\n  - Child');
+ assert.equal(data.text,'Root');assert.equal(data.expanded,true);
+ assert.equal(data.children[0].text,'Parent');assert.equal(data.children[0].expanded,true);assert.equal(data.children[0].children[0].text,'Child');
+});
+
 test('explicitly empty new node remains empty while omitted text uses the default', () => {
     const added = [];
     class NewNode { constructor(data) { this.data = data; } }
