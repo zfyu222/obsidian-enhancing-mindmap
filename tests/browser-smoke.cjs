@@ -1166,6 +1166,21 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         }
         await page.screenshot({path:path.join(screenshotDir,'virtual-expansion-cached-geometry.png')});
         console.log('Cached production geometry: target/virtual root/descendant collapse and expansion, persisted reload and undo/redo restore visible dimensions without subtree collisions.');
+        await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,30)));
+        await page.evaluate(()=>{
+            const map=testMap,refresh=map.refresh;window.batchedRefreshes=0;
+            map.refresh=function(){window.batchedRefreshes++;return refresh.call(this)};
+            for(let i=0;i<368;i++)map.initNode({detail:{}});
+            if(window.batchedRefreshes!==0)throw Error('Render burst must yield before layout');
+        });
+        await page.waitForFunction(()=>window.batchedRefreshes===1);
+        await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,30)));
+        assert.equal(await page.evaluate(()=>window.batchedRefreshes),1);
+        await page.evaluate(()=>cachedGraftTest.source.setText('Longer asynchronously rendered source text'));
+        await page.waitForFunction(()=>window.batchedRefreshes===2&&testMap.grafts.roots[0].node.contentEl.textContent==='Longer asynchronously rendered source text');
+        await page.waitForFunction(()=>window.batchedRefreshes===3);
+        assert.equal(await page.evaluate(()=>{const n=testMap.grafts.roots[0].node;return n.getBox().width===n.contentEl.offsetWidth&&n.getBox().width>0}),true);
+        console.log('Render batching: 368 notifications share one real layout; later asynchronous source/mirror renders still update dimensions.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');

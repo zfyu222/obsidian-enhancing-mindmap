@@ -16,7 +16,7 @@ const commands=load('src/mindmap/Cmds.ts',{'./selection':selection,'./INode':{de
 const History=load('src/mindmap/History.ts').default;
 const Exec=load('src/mindmap/Execute.ts',{'./History':{default:History},'./Cmds':commands,'./INode':{default:Node},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
 const Summaries=load('src/summary/manager.ts',{'./markdown':{summaryMarkdown:()=>''},'../mindmap/INode':{default:Node},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
-const Grafts=load('src/grafts/manager.ts',{'./model':model,'../mindmap/INode':{default:Node},'../mindmap/Cmds':commands,'../nodeStyles':{applyNodeStyle(){}},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
+const Grafts=load('src/grafts/manager.ts',{'./model':model,'../mindmap/INode':{default:Node},'../mindmap/Cmds':commands,'../nodeStyles':{applyNodeStyle(node){node.styleApplies=(node.styleApplies||0)+1}},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
 const MindMap=load('src/mindmap/mindmap.ts',{'./selection':selection,'./clipboard':clip,'../MindMapView':{uuid}}).default;
 const json=value=>JSON.parse(JSON.stringify(value));
 function fixture(){const map=Object.create(MindMap.prototype);Object.assign(map,{exec:new Exec(),setting:{headLevel:1},selectedNodes:[],_menuDom:{style:{}},emit(){},refresh(){if(this.grafts)this.grafts.withTrees(()=>{});},contentEL:{contains(){return false},appendChild(){}},appEl:{focus(){}},edgeGroup:{group(){return{clear(){}}}}});
@@ -114,6 +114,20 @@ test('visible mirrors remeasure after hidden target expansion and restored fold 
  map.execute('collapseNode',{node:b});map.refresh();map.execute('expandNode',{node:b});check();
  const mirror=map.grafts.roots[0].node;
  map.execute('collapseNode',{node:mirror});map.undo();check();map.redo();map.undo();check();
+});
+
+test('unchanged virtual styles avoid writes while local, preset and default mutations invalidate the cache',()=>{
+ const {map,a,b}=fixture();map.grafts.create(a.getId(),b.getId());
+ const mirror=map.grafts.roots[0].node,start=mirror.styleApplies;
+ map.refresh();map.refresh();assert.equal(mirror.styleApplies,start);
+ a.data.nodeStyle={fontSize:20};map.refresh();assert.equal(mirror.styleApplies,start+1);
+ a.data.nodeStyle.fontSize=24;map.refresh();assert.equal(mirror.styleApplies,start+2);
+ map.setting.defaultNodeStyle={color:'#ff0000'};map.refresh();assert.equal(mirror.styleApplies,start+3);
+ map.setting.defaultNodeStyle.color='#00ff00';map.refresh();assert.equal(mirror.styleApplies,start+4);
+ map.setting.nodeStylePresets=[{name:'Preset',fontSize:30}];map.refresh();assert.equal(mirror.styleApplies,start+5);
+ map.setting.nodeStylePresets[0].fontSize=32;map.refresh();assert.equal(mirror.styleApplies,start+6);
+ delete a.data.nodeStyle;map.refresh();assert.equal(mirror.styleApplies,start+7);
+ map.refresh();assert.equal(mirror.styleApplies,start+7);
 });
 
 test('legacy references inherit folds once and nested instances keep separate fold paths',()=>{

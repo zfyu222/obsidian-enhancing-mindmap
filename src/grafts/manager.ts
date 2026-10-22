@@ -12,6 +12,7 @@ export default class GraftManager {
     items: GraftData[] = []; preserved = ''; pending = '';
     nodes = new Map<string, Node>(); roots: { link: GraftData; node: Node; target: Node }[] = [];
     attached = false;
+    private styleKeys = new WeakMap<Node, string>();
     sourceLinks?: SVGGElement;
     constructor(public map: any) { map.appEl.addEventListener?.('input', this.preview); }
     preview = () => {
@@ -112,6 +113,7 @@ export default class GraftManager {
     }
     all(callback: (node: Node) => void) { if (!this.attached) this.nodes.forEach(callback); }
     sync() {
+        const styleSettingsKey = JSON.stringify([this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle]);
         const byId = new Map(this.originals().map(node => [node.getId(), node]));
         const editor = this.map.editNode?.data.isEdit ? this.map.editNode : null;
         const editingSource = this.original(editor);
@@ -139,7 +141,11 @@ export default class GraftManager {
                 if ((changed || mirror.virtualPreview) && source !== editingSource) {
                     mirror.virtualPreview = false; mirror.setText(source.data.text);
                 }
-                applyNodeStyle(mirror, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
+                const styleKey = JSON.stringify([source.data.stylePreset, source.data.nodeStyle]) + styleSettingsKey;
+                if (this.styleKeys.get(mirror) !== styleKey) {
+                    applyNodeStyle(mirror, this.map.setting.nodeStylePresets || [], this.map.setting.defaultNodeStyle);
+                    this.styleKeys.set(mirror, styleKey);
+                }
             }
             const key = JSON.stringify([...chain, source.getId()]), folds = states.get(link.id)!;
             if (!folds.has(key)) folds.set(key, { path: chain.slice(), node: source.getId(), expanded: source.isExpand });

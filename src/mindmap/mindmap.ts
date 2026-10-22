@@ -74,6 +74,8 @@ export default class MindMap {
     edgeGroup: any;
     _nodeNum: number = 0;
     _tempNum: number = 0;
+    private renderRefreshTimer?: ReturnType<typeof setTimeout>;
+    private disposed = false;
     view?: MindMapView;
     colors: string[] = [];
     _dragNode: INode;
@@ -423,12 +425,14 @@ export default class MindMap {
 
     initNode(evt: CustomEvent) {
         this._tempNum++;
-        //console.log(this._nodeNum,this._tempNum);
-
-        if (this._tempNum >= this._nodeNum) {
-            this.refresh();
-            //this.center();
-        }
+        // Original, summary and virtual nodes finish rendering independently.
+        // Batch their completion notifications instead of laying out once per
+        // notification after the original-tree counter reaches its threshold.
+        if (this.disposed || this.renderRefreshTimer !== undefined) return;
+        this.renderRefreshTimer = setTimeout(() => {
+            this.renderRefreshTimer = undefined;
+            if (!this.disposed) this.refresh();
+        }, 0);
     }
 
     renderEditNode(evt: CustomEvent) {
@@ -2108,6 +2112,9 @@ export default class MindMap {
     }
 
     clear() {
+        this.disposed = true;
+        clearTimeout(this.renderRefreshTimer);
+        this.renderRefreshTimer = undefined;
         this.grafts?.clear();
         this.textFormatMenu?.close();
         this.relations?.clear();
@@ -2402,7 +2409,11 @@ export default class MindMap {
     }
 
     refresh() {
+        if (this.disposed) return;
         if (this.summaryTransaction) return;
+        // A synchronous command refresh also satisfies pending render work.
+        clearTimeout(this.renderRefreshTimer);
+        this.renderRefreshTimer = undefined;
         const layout = () => { this.layout(); this.summaries?.layout(); };
         if (this.grafts) this.grafts.withTrees(layout); else layout();
         this.grafts?.renderSourceLinks();
