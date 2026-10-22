@@ -372,7 +372,7 @@ export class MindMapView extends TextFileView implements HoverParent {
 
   setViewData(data: string) {
     const currentHighlights = this.mindmap?.path === this.file?.path ? this.mindmap?.highlights : undefined;
-    const highlightState = currentHighlights && {keywords: currentHighlights.keywords.slice(), wholeWord: currentHighlights.wholeWord};
+    const highlightState = currentHighlights && {keywords: currentHighlights.keywords.slice(), wholeWord: currentHighlights.wholeWord, colors: currentHighlights.keywords.map(keyword => currentHighlights.color(keyword))};
     const generation=++this.renderGeneration;this.searchReady=false;clearTimeout(this.initTimer);this.searchNavigation.beginRender();
     this.panel?.destroy();
     this.panel = null;
@@ -412,7 +412,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     const body = document.createElement('div'); body.className = 'mm-view-body';
     this.contentEl.appendChild(body); body.appendChild(viewport);
     this.mindmap = new MindMap(mindData, viewport, this.plugin.settings);
-    if (highlightState) this.mindmap.highlights?.set(highlightState.keywords, highlightState.wholeWord);
+    if (highlightState) this.mindmap.highlights?.set(highlightState.keywords, highlightState.wholeWord, highlightState.colors);
     this.toolbar = new MindMapToolbar(this.mindmap, this.contentEl);
     this.panel = new MindMapPanel(this.mindmap, body, () => {
       const settings = (this.app as any).setting;

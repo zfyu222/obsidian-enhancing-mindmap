@@ -1,6 +1,8 @@
 // English
 
 export default {
+    'Keyword color': 'Keyword color',
+    'Add highlight keyword': 'Add highlight keyword',
     'Highlight keywords': 'Highlight keywords',
     'Enter keyword': 'Enter keyword',
     'Highlight keyword': 'Highlight keyword',

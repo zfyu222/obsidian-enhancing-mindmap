@@ -113,12 +113,22 @@ export default class TextFormatMenu {
     close() { this.cleanup?.(); this.cleanup = undefined; this.element?.remove(); this.element = undefined; }
     show(event: MouseEvent): boolean {
         this.close();
-        const node = this.map.editNode || this.map.selectNode;
-        if (this.map.isComposing || !node?.data.isEdit || !node.contentEl.contains(event.target as Node)) return false;
+        const element = (event.target as Element)?.closest?.('.mm-node');
+        const node = (element && this.map.getNodeById(element.getAttribute('data-id'))) || this.map.editNode || this.map.selectNode;
+        if (this.map.isComposing || !node || !node.contentEl.contains(event.target as Node)) return false;
+        const editing = !!node.data.isEdit;
         const saved = editorSelection(node.contentEl); if (!saved) return false;
         const doc: Document = node.contentEl.ownerDocument, menu = doc.createElement('div');
         menu.className = 'mm-text-format-menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', t('Text format'));
         this.element = menu;
+        const keyword = doc.createElement('button'); keyword.type = 'button'; keyword.textContent = t('Add highlight keyword'); keyword.setAttribute('role', 'menuitem');
+        keyword.addEventListener('mousedown', e => e.preventDefault());
+        keyword.addEventListener('click', () => {
+            if (this.map.getNodeById(node.getId()) === node && !!node.data.isEdit === editing && node.contentEl.innerText.replace(/\r\n/g, '\n') === saved.text)
+                this.map.highlights?.add(saved.text.slice(saved.start, saved.end));
+            this.close();
+        });
+        menu.appendChild(keyword);
         const apply = (style: string) => {
             if (this.map.getNodeById(node.getId()) !== node || !node.data.isEdit || node.contentEl.innerText.replace(/\r\n/g, '\n') !== saved.text) { this.close(); return; }
             const result = formatSelection(saved.text, saved.start, saved.end, style); this.close();
@@ -142,6 +152,7 @@ export default class TextFormatMenu {
             el.addEventListener('mousedown', e => e.preventDefault()); el.addEventListener('click', () => apply(style));
             menu.appendChild(el);
         };
+        if (editing) {
         button('bold', t('Bold'), 'bold'); button('italic', t('Italic'), 'italic');
         button('strike', t('Strikethrough'), 'strike'); button('highlight', t('Highlight'), 'highlight');
         const separator = doc.createElement('div'); separator.className = 'mm-text-format-separator'; menu.appendChild(separator);
@@ -150,6 +161,7 @@ export default class TextFormatMenu {
         const custom = doc.createElement('label'); custom.className = 'mm-text-custom-color'; custom.textContent = t('Custom text color');
         const picker = doc.createElement('input'); picker.type = 'color'; picker.value = '#1e88e5'; picker.setAttribute('aria-label', t('Custom text color'));
         picker.addEventListener('change', () => apply(picker.value)); custom.appendChild(picker); menu.appendChild(custom);
+        }
         doc.body.appendChild(menu);
         const bounds = menu.getBoundingClientRect();
         menu.style.left = Math.max(4, Math.min(event.clientX, doc.documentElement.clientWidth - bounds.width - 4)) + 'px';

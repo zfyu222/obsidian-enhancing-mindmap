@@ -29,6 +29,7 @@ export default class MindMapPanel {
     private presetSource?: {node: any; style: ReturnType<typeof snapshotNodeStyle>};
     private savingPreset = false;
     private doc: Document;
+    private updateKeywords?: () => void;
     constructor(private map: MindMap, host: HTMLElement, manage: () => void, private mobile = false) {
         this.doc = host.ownerDocument;
         this.element = document.createElement('aside'); this.element.className = 'mm-side-panel';
@@ -124,12 +125,16 @@ export default class MindMapPanel {
             highlights.keywords.forEach(keyword => {
                 const chip = this.doc.createElement('span'); chip.className = 'mm-keyword-chip';
                 chip.appendChild(this.doc.createTextNode(keyword));
+                const color = this.doc.createElement('input'); color.type = 'color'; color.value = highlights.color(keyword);
+                color.setAttribute('aria-label', t('Keyword color') + ': ' + keyword);
+                color.addEventListener('change', () => highlights.setColor(keyword, color.value)); chip.prepend(color);
                 const remove = this.doc.createElement('button'); remove.type = 'button'; remove.textContent = '×';
                 remove.setAttribute('aria-label', t('Remove keyword') + ': ' + keyword);
                 remove.addEventListener('click', () => { highlights.set(highlights.keywords.filter(value => value !== keyword)); render(); });
                 chip.appendChild(remove); list.appendChild(chip);
             });
         };
+        this.updateKeywords = render; this.map.on('keywordHighlightsChange', render);
         form.addEventListener('submit', event => {
             event.preventDefault(); if (!input.value.trim() || (event as any).isComposing) return;
             highlights.set([...highlights.keywords, input.value]); input.value = ''; render(); input.focus();
@@ -300,6 +305,7 @@ export default class MindMapPanel {
     };
     toggle() { this.element.hidden = !this.element.hidden; if (this.element.hidden) this.cancelFontSize(); }
     destroy() {
+        if (this.updateKeywords) this.map.off('keywordHighlightsChange', this.updateKeywords);
         this.cancelFontSize();
         this.map.appEl.removeEventListener('click', this.canvasClick);
         this.doc.removeEventListener('selectionchange', this.selectionChange);

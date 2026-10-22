@@ -1991,6 +1991,10 @@ export default class MindMap {
         const target = evt.target as HTMLElement;
         if (target.closest('.mm-node-menu, .mm-node-bar, a, input, textarea, [contenteditable="true"]')) return;
         if (evt.button === 2) {
+            const content = target.closest('.mm-node-content');
+            const selection = content?.ownerDocument?.defaultView?.getSelection();
+            const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : null;
+            if (content && range && content.contains(range.startContainer) && content.contains(range.endContainer)) return;
             evt.preventDefault();
             this._panning = true;
             this._panMoved = false;
@@ -2043,7 +2047,7 @@ export default class MindMap {
             evt.stopImmediatePropagation();
             return;
         }
-        if (!this.isNodeEditorTarget(evt.target)) { this.textFormatMenu?.close(); return; }
+        if (!this.isNodeEditorTarget(evt.target) && !(evt.target as Element)?.closest?.('.mm-node-content')) { this.textFormatMenu?.close(); return; }
         if (!this.textFormatMenu) this.textFormatMenu = new TextFormatMenu(this);
         if (this.textFormatMenu.show(evt)) {
             evt.preventDefault();

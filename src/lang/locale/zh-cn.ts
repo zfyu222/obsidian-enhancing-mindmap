@@ -1,6 +1,8 @@
 // 简体中文
 
 export default {
+    'Keyword color': '关键词颜色',
+    'Add highlight keyword': '添加高亮关键词',
     'Highlight keywords': '高亮关键词',
     'Enter keyword': '输入关键词',
     'Highlight keyword': '高亮关键词输入',

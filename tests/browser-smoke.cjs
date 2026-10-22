@@ -16,7 +16,7 @@ function visit(node) {
 visit(source);
 const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
-names.push('keywordMatches','KeywordHighlighter');
+names.push('keywordMatches','keywordSpans','keywordTextColor','KeywordHighlighter');
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -1216,6 +1216,9 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         });
         assert.equal(await page.locator('#keyword-fallback mark').count(),3);
         assert.equal(await page.locator('#keyword-fallback b').textContent(),'Sta');
+        await page.evaluate(()=>keywordFallback.h.setColor('State','#124488'));
+        assert.equal(await page.locator('#keyword-fallback mark').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(18, 68, 136)');
+        assert.equal(await page.locator('#keyword-fallback mark').first().evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
         await page.evaluate(()=>keywordFallback.h.set([]));
         assert.equal(await page.evaluate(()=>keywordFallback.node.contentEl.innerHTML===keywordFallback.html),true);
         await page.evaluate(()=>{keywordFallback.h.destroy();keywordFallback.host.remove();});
@@ -1234,7 +1237,11 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.locator('.mm-keyword-chip').count(),1,'Duplicate keywords are ignored');
         await keywordInput.fill('Leaf');await keywordInput.press('Enter');
         assert.equal(await page.locator('.mm-keyword-chip').count(),2);
-        assert.equal(await page.evaluate(()=>CSS.highlights.get(testMap.highlights.name).size),14);
+        assert.equal(await page.evaluate(()=>[...CSS.highlights].filter(([name])=>name===testMap.highlights.name||name.startsWith(testMap.highlights.name+'-')).reduce((sum,[,highlight])=>sum+highlight.size,0)),14);
+        assert.notEqual(await page.evaluate(()=>testMap.highlights.color('State')),await page.evaluate(()=>testMap.highlights.color('Leaf')));
+        await page.getByLabel('Keyword color: State',{exact:true}).fill('#124488');
+        await page.getByLabel('Keyword color: State',{exact:true}).dispatchEvent('change');
+        assert.equal(await page.evaluate(()=>testMap.highlights.color('State')),'#124488');
         assert.equal(await page.evaluate(()=>testMap.getMarkdown()===keywordBefore.markdown&&testMap.exec.history.undos.length===keywordBefore.history),true);
         await page.screenshot({path:path.join(screenshotDir,'keyword-highlights.png')});
         await page.getByRole('button',{name:'Remove keyword: Leaf',exact:true}).click();
@@ -1246,6 +1253,20 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.equal(await page.evaluate(()=>CSS.highlights.get(testMap.highlights.name).size),8);
         await page.getByRole('button',{name:'Remove keyword: State',exact:true}).click();
         assert.equal(await page.evaluate(()=>CSS.highlights.has(testMap.highlights.name)),false);
+        // Select in an editor and add via the real right-click menu without a content/history change.
+        await page.evaluate(()=>{const n=cachedGraftTest.source;testMap.setSelectedNodes([n]);n.edit();selectEditorOffsets(n.contentEl,0,5);window.keywordContextBefore={text:n.data.text,history:testMap.exec.history.undos.length};});
+        const selectedPoint=await page.evaluate(()=>{const r=getSelection().getRangeAt(0).getBoundingClientRect();return{x:r.x+2,y:r.y+2}});
+        await page.mouse.click(selectedPoint.x,selectedPoint.y,{button:'right'});
+        await page.getByRole('menuitem',{name:'Add highlight keyword',exact:true}).click();
+        assert.equal(await page.locator('.mm-keyword-chip').count(),1);
+        assert.equal(await page.evaluate(()=>cachedGraftTest.source.data.text===keywordContextBefore.text&&testMap.exec.history.undos.length===keywordContextBefore.history&&cachedGraftTest.source.data.isEdit),true);
+        await page.evaluate(()=>{testMap.finishEditingForHistory();selectEditorOffsets(cachedGraftTest.source.contentEl,6,18);});
+        const renderedPoint=await page.evaluate(()=>{const r=getSelection().getRangeAt(0).getBoundingClientRect();return{x:r.x+2,y:r.y+2}});
+        await page.mouse.click(renderedPoint.x,renderedPoint.y,{button:'right'});
+        assert.equal(await page.getByRole('menuitem',{name:'Bold',exact:true}).count(),0);
+        await page.getByRole('menuitem',{name:'Add highlight keyword',exact:true}).click();
+        assert.deepEqual(await page.evaluate(()=>testMap.highlights.keywords),['State','StateMachine']);
+        await page.screenshot({path:path.join(screenshotDir,'keyword-colors-context-menu.png')});
         await page.evaluate(()=>keywordPanel.destroy());
         console.log('Keyword highlights: literal whole-word default, substring toggle, native selection/markup, async changes, hidden/editing exclusion, legacy fallback, panel add/delete/dedup, virtual mirrors and unchanged Markdown/history passed.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
