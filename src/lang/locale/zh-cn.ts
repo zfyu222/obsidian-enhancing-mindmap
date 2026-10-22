@@ -1,6 +1,12 @@
 // 简体中文
 
 export default {
+    'Highlight keywords': '高亮关键词',
+    'Enter keyword': '输入关键词',
+    'Highlight keyword': '高亮关键词输入',
+    'Add keyword': '添加关键词',
+    'Remove keyword': '删除关键词',
+    'Whole word match': '全词匹配',
   'Graft virtual branch': '嫁接虚拟分支',
   'Detach virtual branch': '解除虚拟分支',
   'Virtual node: editing changes the source': '虚拟节点：编辑会同步修改原节点',

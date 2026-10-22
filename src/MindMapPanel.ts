@@ -3,6 +3,7 @@ import { findPreset, effectiveNodeStyle, validPresetName, snapshotNodeStyle } fr
 import { renderPresetColorPicker, renderNodeBoxControls } from './StylePresetSettings';
 import { editorSelection, applyEditorStyle } from './mindmap/text-format';
 import { t } from './lang/helpers';
+import KeywordHighlighter from './mindmap/keyword-highlights';
 
 /** Per-map inspector. Text selection and node selection have separate formatting paths. */
 export default class MindMapPanel {
@@ -42,8 +43,10 @@ export default class MindMapPanel {
             this.element.insertBefore(close, title);
             map.appEl.addEventListener('click', this.canvasClick);
         }
+        if (!map.highlights) map.highlights = new KeywordHighlighter(map);
+        this.keywordControls();
         const section = document.createElement('section'); this.element.appendChild(section);
-        this.heading = document.createElement('h4'); section.appendChild(this.heading);
+        this.heading = document.createElement('h4'); this.heading.className = 'mm-panel-style-heading'; section.appendChild(this.heading);
         this.status = document.createElement('p'); this.status.className = 'mm-panel-status'; section.appendChild(this.status);
         this.color = renderPresetColorPicker(section, undefined, () => this.apply('color', this.color.value), false);
         const sizeRow = document.createElement('div'); sizeRow.className = 'mm-panel-size'; section.appendChild(sizeRow);
@@ -102,6 +105,37 @@ export default class MindMapPanel {
         this.doc.addEventListener('selectionchange', this.selectionChange);
         map.on('toolbarChange', this.update); map.on('mindMapChange', this.update); map.appEl.addEventListener('input', this.selectionChange);
         this.update();
+    }
+    private keywordControls() {
+        const highlights = this.map.highlights!;
+        const section = this.doc.createElement('section'); section.className = 'mm-panel-keywords';
+        const heading = this.doc.createElement('h4'); heading.textContent = t('Highlight keywords'); section.appendChild(heading);
+        const form = this.doc.createElement('form'); form.className = 'mm-keyword-form';
+        const input = this.doc.createElement('input'); input.type = 'text'; input.maxLength = 200;
+        input.placeholder = t('Enter keyword'); input.setAttribute('aria-label', t('Highlight keyword'));
+        const add = this.doc.createElement('button'); add.type = 'submit'; add.textContent = t('Add keyword');
+        form.appendChild(input); form.appendChild(add); section.appendChild(form);
+        const label = this.doc.createElement('label'); label.className = 'mm-keyword-whole-word';
+        const wholeWord = this.doc.createElement('input'); wholeWord.type = 'checkbox'; wholeWord.checked = highlights.wholeWord;
+        label.appendChild(wholeWord); label.appendChild(this.doc.createTextNode(t('Whole word match'))); section.appendChild(label);
+        const list = this.doc.createElement('div'); list.className = 'mm-keyword-list'; section.appendChild(list);
+        const render = () => {
+            list.textContent = '';
+            highlights.keywords.forEach(keyword => {
+                const chip = this.doc.createElement('span'); chip.className = 'mm-keyword-chip';
+                chip.appendChild(this.doc.createTextNode(keyword));
+                const remove = this.doc.createElement('button'); remove.type = 'button'; remove.textContent = '×';
+                remove.setAttribute('aria-label', t('Remove keyword') + ': ' + keyword);
+                remove.addEventListener('click', () => { highlights.set(highlights.keywords.filter(value => value !== keyword)); render(); });
+                chip.appendChild(remove); list.appendChild(chip);
+            });
+        };
+        form.addEventListener('submit', event => {
+            event.preventDefault(); if (!input.value.trim() || (event as any).isComposing) return;
+            highlights.set([...highlights.keywords, input.value]); input.value = ''; render(); input.focus();
+        });
+        wholeWord.addEventListener('change', () => highlights.set(highlights.keywords, wholeWord.checked));
+        render(); this.element.appendChild(section);
     }
     private hide() { this.element.hidden = true; this.cancelFontSize(); }
     private canvasClick = (event: MouseEvent) => {

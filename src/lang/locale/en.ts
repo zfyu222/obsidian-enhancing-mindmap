@@ -1,6 +1,12 @@
 // English
 
 export default {
+    'Highlight keywords': 'Highlight keywords',
+    'Enter keyword': 'Enter keyword',
+    'Highlight keyword': 'Highlight keyword',
+    'Add keyword': 'Add keyword',
+    'Remove keyword': 'Remove keyword',
+    'Whole word match': 'Whole word match',
     'Graft virtual branch': 'Graft virtual branch',
     'Detach virtual branch': 'Detach virtual branch',
     'Virtual node: editing changes the source': 'Virtual node: editing changes the source',

@@ -442,3 +442,11 @@
 .mm-relation.is-selected .mm-relation-line { stroke: var(--interactive-accent, #5294e2); stroke-width: 2.5; }
 .mm-relation.is-selected .mm-relation-arrow { fill: var(--interactive-accent, #5294e2); }
 .mm-toolbar button[aria-pressed=true] { background: var(--interactive-accent); color: var(--text-on-accent); }
+.mm-keyword-highlight { background-color: #ffe36a; color: #202020; padding: 0; margin: 0; border: 0; border-radius: 0; font: inherit; }
+.mm-keyword-form { display: flex; gap: 6px; }
+.mm-keyword-form input { min-width: 0; width: 0; flex: 1; }
+.mm-side-panel .mm-keyword-form button { width: auto; margin: 0; flex-shrink: 0; }
+.mm-keyword-whole-word { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.mm-keyword-list { display: flex; flex-wrap: wrap; gap: 6px; overflow-wrap: anywhere; }
+.mm-keyword-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 6px; border-radius: 6px; background: var(--background-modifier-hover, #80808040); }
+.mm-side-panel .mm-keyword-chip button { width: auto; margin: 0; padding: 0 4px; height: auto; flex-shrink: 0; }

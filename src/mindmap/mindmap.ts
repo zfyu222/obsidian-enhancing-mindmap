@@ -4,6 +4,7 @@ import INode, { INodeData } from './INode'
 import SummaryManager from '../summary/manager'
 import RelationManager from '../relations/manager'
 import GraftManager from '../grafts/manager'
+import KeywordHighlighter from './keyword-highlights'
 import TextFormatMenu from './text-format'
 import Layout from './Layout'
 import { Notice, Platform } from 'obsidian'
@@ -94,6 +95,7 @@ export default class MindMap {
     summaries?: SummaryManager;
     relations?: RelationManager;
     grafts?: GraftManager;
+    highlights?: KeywordHighlighter;
     summaryTransaction = false;
     textFormatMenu?: TextFormatMenu;
 
@@ -154,6 +156,7 @@ export default class MindMap {
         this.summaries = new SummaryManager(this);
         this.relations = new RelationManager(this);
         this.grafts = new GraftManager(this);
+        this.highlights = new KeywordHighlighter(this);
 
         this.appClickFn = this.appClickFn.bind(this);
         this.appDragstart = this.appDragstart.bind(this);
@@ -2113,6 +2116,7 @@ export default class MindMap {
 
     clear() {
         this.disposed = true;
+        this.highlights?.destroy();
         clearTimeout(this.renderRefreshTimer);
         this.renderRefreshTimer = undefined;
         this.grafts?.clear();
@@ -2418,6 +2422,7 @@ export default class MindMap {
         if (this.grafts) this.grafts.withTrees(layout); else layout();
         this.grafts?.renderSourceLinks();
         this.relations?.render();
+        this.highlights?.refresh();
     }
 
     emit(name: string, data?: any) {

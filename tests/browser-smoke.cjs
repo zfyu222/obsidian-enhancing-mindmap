@@ -16,6 +16,7 @@ function visit(node) {
 visit(source);
 const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
+names.push('keywordMatches','KeywordHighlighter');
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -67,7 +68,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 addChild(n,index=-1){ProdNode.prototype.addChild.call(this,n,index)} removeChild(n){return ProdNode.prototype.removeChild.call(this,n)}
             }
             const Node$1 = Node;
-            Object.assign(window,{GraftManager,extractGrafts,validGraftGraph});
+            Object.assign(window,{GraftManager,extractGrafts,validGraftGraph,KeywordHighlighter});
             window.makeGraftTestNode=(id,text,parent)=>{const n=new Node({id,text},testMap);n.setPosition(0,0);if(parent){parent.children.push(n);n.parent=parent;}testMap.appEl.append(n.containEl);n.refreshBox();return n;};
             const Notice = class { constructor(text) { console.error(text); } };
             let clipboardText='';
@@ -764,7 +765,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await inspector.getByRole('button',{name:'Clear local node style',exact:true}).click();
         assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle),undefined);
         await page.evaluate(()=>{testMap.root.setText('Before selected after');testMap.root.edit();selectEditorOffsets(testMap.root.contentEl,7,15);});
-        await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Selected text style');
+        await page.waitForFunction(()=>document.querySelector('.mm-panel-style-heading').textContent==='Selected text style');
         assert.equal(await inspector.locator('.mm-box-controls').isVisible(),false);
         await sidebarSize.fill('18');
         await page.evaluate(()=>{testMap.root.contentEl.focus();selectEditorOffsets(testMap.root.contentEl,0,6);});
@@ -798,7 +799,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.keyboard.press('Control+y');
         assert.ok((await page.evaluate(()=>testMap.root.data.text)).includes('<u>'));
         await page.evaluate(()=>{testMap.finishEditingForHistory();testMap.setSelectedNodes([testMap.root]);});
-        await page.waitForFunction(()=>document.querySelector('.mm-side-panel h4').textContent==='Node style');
+        await page.waitForFunction(()=>document.querySelector('.mm-panel-style-heading').textContent==='Node style');
         assert.equal(await presetSelect.isVisible(),true);
         await page.screenshot({path:path.join(screenshotDir,'sidebar-node-style.png')});
 
@@ -1181,6 +1182,72 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.waitForFunction(()=>window.batchedRefreshes===3);
         assert.equal(await page.evaluate(()=>{const n=testMap.grafts.roots[0].node;return n.getBox().width===n.contentEl.offsetWidth&&n.getBox().width>0}),true);
         console.log('Render batching: 368 notifications share one real layout; later asynchronous source/mirror renders still update dimensions.');
+        // Native highlights preserve DOM, inline markup and the browser text selection.
+        await page.evaluate(()=>{
+            const host=document.createElement('div');host.id='keyword-fixture';document.body.append(host);
+            const make=(html,hidden=false,editing=false)=>{
+                const contentEl=document.createElement('div');contentEl.className='mm-node-content';contentEl.innerHTML=html;host.append(contentEl);
+                return {contentEl,data:{isEdit:editing},isShow:()=>!hidden};
+            };
+            const nodes=[make('State() bState StateMachine <b>Sta</b>te.Value <a href="#link">State</a> <code>State</code>'),make('State',true),make('State',false,true)];
+            const highlighter=new KeywordHighlighter({appEl:host,traverseAll:fn=>nodes.forEach(fn)});
+            window.keywordFixture={host,nodes,highlighter,html:nodes[0].contentEl.innerHTML};
+            const selection=getSelection(),range=document.createRange();range.selectNodeContents(nodes[0].contentEl.querySelector('b'));selection.removeAllRanges();selection.addRange(range);
+            highlighter.set(['State']);
+        });
+        assert.deepEqual(await page.evaluate(()=>[...CSS.highlights.get(keywordFixture.highlighter.name)].map(r=>r.toString())),['State','State','State','State']);
+        assert.equal(await page.evaluate(()=>keywordFixture.nodes[0].contentEl.innerHTML===keywordFixture.html),true);
+        assert.equal(await page.evaluate(()=>getSelection().toString()),'Sta');
+        await page.evaluate(()=>keywordFixture.highlighter.set(['State'],false));
+        assert.equal(await page.evaluate(()=>CSS.highlights.get(keywordFixture.highlighter.name).size),6);
+        await page.evaluate(()=>{keywordFixture.highlighter.set(['State'],true);keywordFixture.nodes[0].contentEl.querySelector('code').textContent='Changed';});
+        await page.waitForFunction(()=>CSS.highlights.get(keywordFixture.highlighter.name)?.size===3);
+        await page.evaluate(()=>{
+            keywordFixture.nodes[0].contentEl.innerHTML='<table><tr><td>State</td><td>Value</td></tr></table><p>State</p><p>Value</p>';
+        });
+        await page.waitForFunction(()=>CSS.highlights.get(keywordFixture.highlighter.name)?.size===2);
+        await page.evaluate(()=>{keywordFixture.highlighter.destroy();keywordFixture.host.remove();getSelection().removeAllRanges();});
+        // Exercise the older WebView fallback without changing global browser capabilities.
+        await page.evaluate(()=>{
+            const host=document.createElement('div');host.id='keyword-fallback';host.innerHTML='<div class="mm-node-content">State <b>Sta</b>te.Value bState</div>';document.body.append(host);
+            const node={contentEl:host.firstElementChild,data:{},isShow:()=>true};
+            const h=new KeywordHighlighter({appEl:host,traverseAll:fn=>fn(node)});h.registry=undefined;h.Highlight=undefined;
+            window.keywordFallback={host,node,h,html:node.contentEl.innerHTML};h.set(['State']);
+        });
+        assert.equal(await page.locator('#keyword-fallback mark').count(),3);
+        assert.equal(await page.locator('#keyword-fallback b').textContent(),'Sta');
+        await page.evaluate(()=>keywordFallback.h.set([]));
+        assert.equal(await page.evaluate(()=>keywordFallback.node.contentEl.innerHTML===keywordFallback.html),true);
+        await page.evaluate(()=>{keywordFallback.h.destroy();keywordFallback.host.remove();});
+        await page.evaluate(async()=>{
+            testMap.highlights.set([]);cachedGraftTest.source.setText('State StateMachine bState State()');
+            await new Promise(resolve=>setTimeout(resolve,40));
+            document.querySelector('.view-content.mm-view').style.height='800px';
+            window.keywordPanel=new MindMapPanel(testMap,document.querySelector('.mm-view-body'),()=>{});
+            window.keywordBefore={markdown:testMap.getMarkdown(),history:testMap.exec.history.undos.length};
+        });
+        const keywordInput=page.getByRole('textbox',{name:'Highlight keyword',exact:true});
+        assert.equal(await page.getByRole('checkbox',{name:'Whole word match',exact:true}).isChecked(),true);
+        await keywordInput.fill('State');await keywordInput.press('Enter');
+        assert.equal(await page.evaluate(()=>CSS.highlights.get(testMap.highlights.name).size),4);
+        await keywordInput.fill('State');await page.getByRole('button',{name:'Add keyword',exact:true}).click();
+        assert.equal(await page.locator('.mm-keyword-chip').count(),1,'Duplicate keywords are ignored');
+        await keywordInput.fill('Leaf');await keywordInput.press('Enter');
+        assert.equal(await page.locator('.mm-keyword-chip').count(),2);
+        assert.equal(await page.evaluate(()=>CSS.highlights.get(testMap.highlights.name).size),14);
+        assert.equal(await page.evaluate(()=>testMap.getMarkdown()===keywordBefore.markdown&&testMap.exec.history.undos.length===keywordBefore.history),true);
+        await page.screenshot({path:path.join(screenshotDir,'keyword-highlights.png')});
+        await page.getByRole('button',{name:'Remove keyword: Leaf',exact:true}).click();
+        await page.evaluate(()=>testMap.execute('collapseNode',{node:cachedGraftTest.target}));
+        await page.waitForFunction(()=>CSS.highlights.get(testMap.highlights.name)?.size===2);
+        await page.evaluate(()=>testMap.execute('expandNode',{node:cachedGraftTest.target}));
+        await page.waitForFunction(()=>CSS.highlights.get(testMap.highlights.name)?.size===4);
+        await page.getByRole('checkbox',{name:'Whole word match',exact:true}).uncheck();
+        assert.equal(await page.evaluate(()=>CSS.highlights.get(testMap.highlights.name).size),8);
+        await page.getByRole('button',{name:'Remove keyword: State',exact:true}).click();
+        assert.equal(await page.evaluate(()=>CSS.highlights.has(testMap.highlights.name)),false);
+        await page.evaluate(()=>keywordPanel.destroy());
+        console.log('Keyword highlights: literal whole-word default, substring toggle, native selection/markup, async changes, hidden/editing exclusion, legacy fallback, panel add/delete/dedup, virtual mirrors and unchanged Markdown/history passed.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
