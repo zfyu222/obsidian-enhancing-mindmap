@@ -1,4 +1,5 @@
 import { renderStylePresetSettings, renderDefaultNodeStyleSettings } from './StylePresetSettings';
+import { renderViewHistorySettings } from './ViewHistorySettings';
 import {
     App,
     PluginSettingTab,
@@ -20,6 +21,7 @@ export class MindMapSettingsTab extends PluginSettingTab {
         const { containerEl } = this;
 
         containerEl.empty();
+        renderViewHistorySettings(containerEl, this.plugin);
         renderDefaultNodeStyleSettings(containerEl, this.plugin);
         renderStylePresetSettings(containerEl, this.plugin);
 

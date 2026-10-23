@@ -1,13 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./search-test-helpers.cjs');
+const options = load('src/mindmap/view-history-options.ts');
 
 function fixture(ready = true) {
     let now = 0, serial = 0, events = 0, reads = 0;
     const timers = new Map(), listeners = new Map();
     const setTimer = (fn, delay) => { const id = ++serial; timers.set(id, { fn, at: now + delay }); return id; };
     const clearTimer = id => timers.delete(id);
-    const History = load('src/mindmap/view-history.ts', {}, { setTimeout: setTimer, clearTimeout: clearTimer }).default;
+    const History = load('src/mindmap/view-history.ts', {'./view-history-options': options}, { setTimeout: setTimer, clearTimeout: clearTimer }).default;
     const viewport = {
         clientWidth: 800, clientHeight: 600, clientLeft: 2, clientTop: 2,
         scrollLeft: 1000, scrollTop: 800, style: {}, ownerDocument: { visibilityState: 'visible' },
@@ -16,7 +17,7 @@ function fixture(ready = true) {
         removeEventListener(name, fn) { if (listeners.get(name) === fn) listeners.delete(name); }
     };
     const map = {
-        root: ready ? {} : null, containerEL: viewport, mindScale: 100, scalePointer: [],
+        root: ready ? {} : null, containerEL: viewport, mindScale: 100, scalePointer: [], setting: {},
         appEl: { getBoundingClientRect() { return { left: 27 - viewport.scrollLeft, top: 47 - viewport.scrollTop }; } },
         emit() { events++; },
         scale(scale) { this.mindScale = scale; history.changed(); }
@@ -105,4 +106,53 @@ test('initial layout seeds once; hidden views, cleanup and the 100-position limi
     assert.equal(count, 99);
     f.scroll(500); f.history.destroy(); f.advance(5000); f.history.changed(); f.history.seed(); f.history.go(-1);
     assert.equal(f.timers.size, 0); assert.equal(f.listeners.size, 0); assert.equal(f.history.canBack, false);
+});
+
+test('custom idle delay and distance apply to existing history without the previous 80px floor', () => {
+    const f = fixture();
+    f.map.setting.viewHistoryIdleSeconds = 2;
+    f.map.setting.viewHistoryDistancePercent = 5;
+    f.scroll(29); f.advance(2000); assert.equal(f.history.canBack, false);
+    f.scroll(1); f.advance(1999); assert.equal(f.history.canBack, false);
+    f.advance(1); assert.equal(f.history.canBack, true);
+    f.scroll(200); f.advance(500);
+    f.map.setting.viewHistoryIdleSeconds = 0.5; f.history.settingsChanged();
+    f.advance(499); assert.equal(f.events(), 2);
+    f.advance(1); assert.equal(f.events(), 3);
+    f.history.go(-1); assert.equal(f.history.canForward, true);
+    f.history.settingsChanged(); assert.equal(f.timers.size, 0); assert.equal(f.history.canForward, true);
+});
+
+test('missing or invalid settings use safe defaults; valid boundaries survive reload', () => {
+    for (const value of [undefined, null, '2', NaN, Infinity, -1, 0, 101]) {
+        const result = options.normalizeViewHistoryOptions({viewHistoryIdleSeconds:value,viewHistoryDistancePercent:value});
+        assert.equal(result.viewHistoryIdleSeconds, 5); assert.equal(result.viewHistoryDistancePercent, 25);
+    }
+    const result = options.normalizeViewHistoryOptions({viewHistoryIdleSeconds:0.5,viewHistoryDistancePercent:1});
+    assert.equal(result.viewHistoryIdleSeconds,0.5);assert.equal(result.viewHistoryDistancePercent,1);
+    const upper = options.normalizeViewHistoryOptions({viewHistoryIdleSeconds:60,viewHistoryDistancePercent:100});
+    assert.equal(upper.viewHistoryIdleSeconds,60);assert.equal(upper.viewHistoryDistancePercent,100);
+});
+
+test('plugin persists history preferences, applies to all open maps, and skips node relayout', async () => {
+    const Plugin = load('src/main.ts', {
+        obsidian:{Plugin:class{}},
+        './mindmap/view-history-options':options,
+        './nodeStyles':{normalizeNodeStyle:value=>value,normalizePresets:value=>value}
+    }).default;
+    const plugin=Object.create(Plugin.prototype);
+    plugin.loadData=async()=>({viewHistoryIdleSeconds:2,viewHistoryDistancePercent:10});
+    await plugin.loadSettings();
+    assert.equal(plugin.settings.viewHistoryIdleSeconds,2);assert.equal(plugin.settings.viewHistoryDistancePercent,10);
+    let saved, updates=0, layouts=0;
+    const maps=[0,1].map(()=>({setting:{},viewHistory:{settingsChanged(){updates++;}},refreshNodeStyles(){layouts++;}}));
+    plugin.saveData=async value=>{saved=JSON.parse(JSON.stringify(value));};
+    plugin.app={workspace:{getLeavesOfType:()=>maps.map(mindmap=>({view:{mindmap}}))}};
+    await plugin.saveSettings(false);
+    assert.equal(saved.viewHistoryIdleSeconds,2);assert.equal(updates,2);assert.equal(layouts,0);
+    for(const map of maps){assert.equal(map.setting.viewHistoryIdleSeconds,2);assert.equal(map.setting.viewHistoryDistancePercent,10);}
+    plugin.loadData=async()=>saved;await plugin.loadSettings();assert.equal(plugin.settings.viewHistoryDistancePercent,10);
+    await plugin.saveSettings();assert.equal(layouts,2);
+    plugin.saveData=async()=>{throw new Error('disk full');};
+    await assert.rejects(plugin.saveSettings(false),/disk full/);assert.equal(updates,2);
 });

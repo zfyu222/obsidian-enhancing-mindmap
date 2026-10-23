@@ -18,6 +18,7 @@ const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSou
 names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
 names.push('keywordMatches','keywordSpans','keywordTextColor','KeywordHighlighter');
 names.push('ViewHistory');
+names.push('normalizeViewHistoryOptions','renderViewHistorySettings');
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });

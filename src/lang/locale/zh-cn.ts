@@ -1,6 +1,11 @@
 // 简体中文
 
 export default {
+  'Viewing position history': '观看位置历史',
+  'Viewing idle time (seconds)': '观看位置停留时间（秒）',
+  'Viewing idle time description': '画布停止移动多久后记录观看位置，范围 0.5–60 秒，默认 5 秒。',
+  'Minimum viewing distance (%)': '观看位置最小移动距离（%）',
+  'Minimum viewing distance description': '相对上次记录，至少移动可视区域短边的多少百分比才记录，范围 1–100%，默认 25%。缩放变化达到 20% 也会记录。',
   'Previous viewing position': '上一个观看位置',
   'Next viewing position': '下一个观看位置',
     'Keyword color': '关键词颜色',

@@ -26,6 +26,8 @@ let addIcon = '<svg class="icon" width="16px" height="16.00px" viewBox="0 0 1024
 let tempDispLevel = 0;
 
 interface Setting {
+    viewHistoryIdleSeconds?: number;
+    viewHistoryDistancePercent?: number;
     defaultNodeStyle?: LocalNodeStyle;
     nodeStylePresets?: NodeStylePreset[];
     theme?: string;

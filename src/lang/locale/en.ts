@@ -1,6 +1,11 @@
 // English
 
 export default {
+    'Viewing position history': 'Viewing position history',
+    'Viewing idle time (seconds)': 'Viewing idle time (seconds)',
+    'Viewing idle time description': 'Record a viewing position after the canvas stops moving for this long (0.5–60 seconds). Default: 5.',
+    'Minimum viewing distance (%)': 'Minimum viewing distance (%)',
+    'Minimum viewing distance description': 'Minimum movement as a percentage of the shorter viewport edge (1–100%). Default: 25%. A zoom change of 20% also records a position.',
     'Previous viewing position': 'Previous viewing position',
     'Next viewing position': 'Next viewing position',
     'Keyword color': 'Keyword color',

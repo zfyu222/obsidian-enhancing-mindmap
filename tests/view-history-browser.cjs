@@ -18,11 +18,13 @@ module.exports = async ({ browser, definitions, screenshotDir }) => {
         <div class="spot" style="left:2400px;top:1900px">Second viewing position</div>
         </div></div></div>`);
         await page.addScriptTag({ content: `(() => {
-            ${['ViewHistory', 'MindMap', 'MindMapToolbar'].map(name => definitions.get(name)).join('\n')}
+            ${['__awaiter', 'normalizeViewHistoryOptions', 'renderViewHistorySettings', 'ViewHistory', 'MindMap', 'MindMapToolbar'].map(name => definitions.get(name)).join('\n')}
             const t = text => text;
+            const obsidian = {Notice:class{constructor(text){window.settingsNotice=text;}}};
+            Object.assign(window,{ViewHistory,normalizeViewHistoryOptions,renderViewHistorySettings});
             const map = Object.create(MindMap.prototype);
             Object.assign(map, {
-                root: {}, mindScale: 100, scalePointer: [],
+                root: {}, mindScale: 100, scalePointer: [], setting: {},
                 appEl: document.querySelector('#canvas'), containerEL: document.querySelector('#viewport'),
                 exec: {history:{undos:[],redos:[]}},
                 getSelectedRoots: () => [], getSelectedNodes: () => [],
@@ -72,6 +74,37 @@ module.exports = async ({ browser, definitions, screenshotDir }) => {
         await page.evaluate(() => {window.oldHistory=map.viewHistory;toolbar.destroy();});
         assert.equal(await page.locator('.mm-toolbar').count(), 0);
         assert.equal(await page.evaluate(() => !map.viewHistory && !oldHistory.canBack), true);
+        await page.evaluate(() => {
+            map.viewHistory = new ViewHistory(map);
+            const settingsHost=document.createElement('div');settingsHost.id='history-settings';document.body.appendChild(settingsHost);
+            window.historyPlugin={settings:{},saveSettings:async(refreshStyles)=>{
+                if(window.failHistorySave)throw new Error('disk full');
+                window.savedHistorySettings=JSON.parse(JSON.stringify(historyPlugin.settings));
+                window.historyRefreshStyles=refreshStyles;
+                Object.assign(map.setting,normalizeViewHistoryOptions(historyPlugin.settings));map.viewHistory.settingsChanged();
+            }};
+            renderViewHistorySettings(settingsHost,historyPlugin);
+        });
+        const idle=page.getByRole('spinbutton',{name:'Viewing idle time (seconds)',exact:true});
+        const distance=page.getByRole('spinbutton',{name:'Minimum viewing distance (%)',exact:true});
+        assert.equal(await idle.inputValue(),'5');assert.equal(await distance.inputValue(),'25');
+        await idle.fill('0.5');await idle.dispatchEvent('change');
+        await distance.fill('5');await distance.dispatchEvent('change');
+        await page.waitForFunction(()=>window.savedHistorySettings?.viewHistoryIdleSeconds===0.5&&window.savedHistorySettings?.viewHistoryDistancePercent===5);
+        assert.equal(await page.evaluate(()=>historyRefreshStyles===false),true);
+        await page.evaluate(()=>{map.containerEL.scrollLeft+=40;});
+        await page.waitForFunction(()=>map.viewHistory.canBack,null,{timeout:2500});
+        assert.equal(await page.evaluate(()=>map.viewHistory.positions.length),2);
+        await idle.fill('');await idle.dispatchEvent('change');assert.equal(await idle.inputValue(),'0.5');
+        await distance.fill('101');await distance.dispatchEvent('change');assert.equal(await distance.inputValue(),'5');
+        await page.evaluate(()=>window.failHistorySave=true);
+        await idle.fill('3');await idle.dispatchEvent('change');
+        await page.waitForFunction(()=>window.settingsNotice==='Save fail');
+        assert.equal(await idle.inputValue(),'0.5');assert.equal(await page.evaluate(()=>map.setting.viewHistoryIdleSeconds),0.5);
+        await page.evaluate(()=>{failHistorySave=false;document.querySelector('#history-settings').textContent='';renderViewHistorySettings(document.querySelector('#history-settings'),historyPlugin);});
+        assert.equal(await idle.inputValue(),'0.5');assert.equal(await distance.inputValue(),'5');
+        await page.screenshot({path:path.join(screenshotDir,'view-history-settings.png')});
+        await page.evaluate(()=>map.viewHistory.destroy());
         assert.deepEqual(errors, []);
         console.log('Viewing history: native scroll/idle timing, actual toolbar back/forward, zoom/origin restoration, resize, forward branching and cleanup passed.');
     } finally { await page.close(); }

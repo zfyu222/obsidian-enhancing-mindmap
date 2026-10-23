@@ -19,7 +19,7 @@ const History = load('src/mindmap/History.ts').default;
 const MindMap = load('src/mindmap/mindmap.ts', {'./StyleNodes':styleCommands}).default;
 const parser = require('../src/markmapLib/markmap-lib/dist/browser/index.js');
 const View = load('src/MindMapView.ts', {obsidian:{TextFileView:class{}},'./markmapLib/markmap-lib':parser,'./summary/markdown':markdown}).MindMapView;
-const Plugin = load('src/main.ts', {obsidian:{Plugin:class{}},'./MindMapView':{mindmapViewType:'mindmapView'}}).default;
+const Plugin = load('src/main.ts', {obsidian:{Plugin:class{}},'./MindMapView':{mindmapViewType:'mindmapView'},'./mindmap/view-history-options':load('src/mindmap/view-history-options.ts')}).default;
 let serial=0;
 function node(text, parent, preset='重点') {
     const values=new Map(), classes=new Set();

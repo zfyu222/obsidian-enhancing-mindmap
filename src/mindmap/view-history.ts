@@ -1,4 +1,5 @@
 import type MindMap from './mindmap';
+import { normalizeViewHistoryOptions } from './view-history-options';
 
 interface ViewPosition { x: number; y: number; scale: number }
 
@@ -31,7 +32,7 @@ export default class ViewHistory {
 
     private distant(a: ViewPosition, b: ViewPosition) {
         const viewport = this.map.containerEL;
-        const threshold = Math.max(80, Math.min(viewport.clientWidth, viewport.clientHeight) / 4);
+        const threshold = Math.max(1, Math.min(viewport.clientWidth, viewport.clientHeight) * normalizeViewHistoryOptions(this.map.setting).viewHistoryDistancePercent / 100);
         const distance = Math.hypot(a.x - b.x, a.y - b.y) * Math.min(a.scale, b.scale) / 100;
         return distance >= threshold || Math.max(a.scale, b.scale) / Math.min(a.scale, b.scale) >= 1.2 - 1e-9;
     }
@@ -58,8 +59,16 @@ export default class ViewHistory {
         this.timer = setTimeout(() => {
             this.timer = undefined;
             if (this.map.containerEL.ownerDocument.visibilityState !== 'hidden') this.record();
-        }, 5000);
+        }, normalizeViewHistoryOptions(this.map.setting).viewHistoryIdleSeconds * 1000);
     };
+
+    settingsChanged() {
+        if (this.timer !== undefined) {
+            // Re-arm a pending stop with the new delay without clearing navigation.
+            this.restoredScroll = undefined;
+            this.changed();
+        }
+    }
 
     private record() {
         if (this.disposed) return;

@@ -1,5 +1,7 @@
 import { NodeStylePreset, LocalNodeStyle } from './nodeStyles';
 export class MindMapSettings {
+    viewHistoryIdleSeconds = 5;
+    viewHistoryDistancePercent = 25;
     defaultNodeStyle: LocalNodeStyle = {};
     nodeStylePresets: NodeStylePreset[] = [];
     theme:string = 'dark';

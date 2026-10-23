@@ -1,4 +1,5 @@
 import { normalizePresets, normalizeNodeStyle } from './nodeStyles';
+import { normalizeViewHistoryOptions } from './mindmap/view-history-options';
 import { isSearchResultState } from './search/navigation';
 import {
   Plugin,
@@ -1235,14 +1236,21 @@ export default class MindMapPlugin extends Plugin {
       nodeStylePresets: []
     }, await this.loadData());
     this.settings.defaultNodeStyle = normalizeNodeStyle(this.settings.defaultNodeStyle) || {};
+    Object.assign(this.settings, normalizeViewHistoryOptions(this.settings));
     this.settings.nodeStylePresets = normalizePresets(this.settings.nodeStylePresets);
   }
 
-  async saveSettings() {
+  async saveSettings(refreshStyles = true) {
     await this.saveData(this.settings);
     this.app.workspace.getLeavesOfType(mindmapViewType).forEach(leaf => {
       const map = (leaf.view as MindMapView).mindmap;
-      if (map) { map.setting.defaultNodeStyle = this.settings.defaultNodeStyle; map.setting.nodeStylePresets = this.settings.nodeStylePresets; map.refreshNodeStyles(); }
+      if (map) {
+        const options = normalizeViewHistoryOptions(this.settings);
+        const changed = map.setting.viewHistoryIdleSeconds !== options.viewHistoryIdleSeconds || map.setting.viewHistoryDistancePercent !== options.viewHistoryDistancePercent;
+        Object.assign(map.setting, options);
+        if (changed) map.viewHistory?.settingsChanged();
+        if (refreshStyles) { map.setting.defaultNodeStyle = this.settings.defaultNodeStyle; map.setting.nodeStylePresets = this.settings.nodeStylePresets; map.refreshNodeStyles(); }
+      }
     });
   }
 
