@@ -5,6 +5,7 @@ import SummaryManager from '../summary/manager'
 import RelationManager from '../relations/manager'
 import GraftManager from '../grafts/manager'
 import KeywordHighlighter from './keyword-highlights'
+import ViewHistory from './view-history'
 import TextFormatMenu from './text-format'
 import Layout from './Layout'
 import { Notice, Platform } from 'obsidian'
@@ -96,6 +97,7 @@ export default class MindMap {
     relations?: RelationManager;
     grafts?: GraftManager;
     highlights?: KeywordHighlighter;
+    viewHistory?: ViewHistory;
     summaryTransaction = false;
     textFormatMenu?: TextFormatMenu;
 
@@ -2110,6 +2112,7 @@ export default class MindMap {
     }
 
     clear() {
+        this.viewHistory?.destroy();
         this.disposed = true;
         this.highlights?.destroy();
         clearTimeout(this.renderRefreshTimer);
@@ -2418,6 +2421,7 @@ export default class MindMap {
         this.grafts?.renderSourceLinks();
         this.relations?.render();
         this.highlights?.refresh();
+        this.viewHistory?.seed();
     }
 
     emit(name: string, data?: any) {
@@ -2653,7 +2657,7 @@ export default class MindMap {
         } else {
             this.appEl.style.transform = "scale(" + this.mindScale / 100 + ")";
         }
-
+        this.viewHistory?.changed();
     }
 
     setScale(type: string) {

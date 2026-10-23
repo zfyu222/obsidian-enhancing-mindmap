@@ -17,6 +17,7 @@ visit(source);
 const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
 names.push('keywordMatches','keywordSpans','keywordTextColor','KeywordHighlighter');
+names.push('ViewHistory');
 const code = names.map(name => { assert.ok(definitions.has(name), name); return definitions.get(name); }).join('\n');
 (async () => {
     const browser = await chromium.launch({ headless: true, ...(process.argv[3] ? { channel: process.argv[3] } : {}) });
@@ -1274,5 +1275,6 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
+        await require('./view-history-browser.cjs')({browser,definitions,screenshotDir});
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

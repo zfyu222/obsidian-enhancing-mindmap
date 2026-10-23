@@ -1,6 +1,8 @@
 // 简体中文
 
 export default {
+  'Previous viewing position': '上一个观看位置',
+  'Next viewing position': '下一个观看位置',
     'Keyword color': '关键词颜色',
     'Add highlight keyword': '添加高亮关键词',
     'Highlight keywords': '高亮关键词',

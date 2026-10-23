@@ -1,5 +1,6 @@
 import MindMap from './mindmap/mindmap';
 import { t } from './lang/helpers';
+import ViewHistory from './mindmap/view-history';
 
 /** Lives outside the scrolling/scaling canvas. All edits use the graph history. */
 export default class MindMapToolbar {
@@ -8,6 +9,10 @@ export default class MindMapToolbar {
   update = () => {
     const map = this.map;
     const ready = !!map.root;
+    if (this.buttons.viewBack) {
+      this.buttons.viewBack.disabled = !ready || !map.viewHistory?.canBack;
+      this.buttons.viewForward.disabled = !ready || !map.viewHistory?.canForward;
+    }
     const roots = ready ? map.getSelectedRoots() : [];
     if (this.buttons.graft) {
       this.buttons.graft.disabled = !map.grafts || !!map.grafts.preserved || (!map.grafts.pending && map.getSelectedNodes().length !== 1);
@@ -46,6 +51,8 @@ export default class MindMapToolbar {
     });
     // Inline SVG keeps icons available on older Obsidian versions as well.
     const icons: Record<string, string> = {
+      viewBack: '<path d="m11 5-7 7 7 7M4 12h16"/>',
+      viewForward: '<path d="m13 5 7 7-7 7M4 12h16"/>',
       graft: '<rect x="2" y="3" width="7" height="5" rx="1"/><path d="M5 8v10h7M9 5h8v6" stroke-dasharray="3 2"/><rect x="13" y="15" width="8" height="6" rx="1"/>',
       removeGraft: '<path d="M5 4v14h8M13 8l7-6m-7 0 7 6" stroke-dasharray="3 2"/><rect x="13" y="15" width="8" height="6" rx="1"/>',
       relation: '<path d="M3 17C8 2 16 22 21 7m-5 0h5v5" stroke-dasharray="3 3"/>',
@@ -77,11 +84,13 @@ export default class MindMapToolbar {
         if (!map.root || map.isComposing) return;
         action();
         this.update();
-        if (!map.editNode?.data.isEdit) map.focusAfterHistory();
+        if (id !== 'viewBack' && id !== 'viewForward' && !map.editNode?.data.isEdit) map.focusAfterHistory();
       });
       this.buttons[id] = el;
       this.element.appendChild(el);
     };
+    button('viewBack', t('Previous viewing position'), t('Previous viewing position'), () => map.viewHistory?.go(-1));
+    button('viewForward', t('Next viewing position'), t('Next viewing position'), () => map.viewHistory?.go(1));
     button('relation', t('Add relation line'), t('Add relation line'), () => map.relations?.begin());
     button('graft', t('Graft virtual branch'), t('Graft virtual branch'), () => map.grafts?.begin());
     button('removeGraft', t('Detach virtual branch'), t('Detach virtual branch'), () => map.grafts?.removeSelected());
@@ -111,6 +120,7 @@ export default class MindMapToolbar {
     button('zoomIn', '+', t('Zoom in'), () => map.scale(map.mindScale + 10));
     button('center', t('Center map'), t('Center map'), () => map.center());
     button('panel', t('Mind map panel'), t('Toggle mind map panel'), () => map.view?.panel?.toggle());
+    map.viewHistory = new ViewHistory(map);
     map.on('toolbarChange', this.update);
     map.on('mindMapChange', this.update);
     map.appEl.addEventListener('input', this.update);
@@ -118,6 +128,8 @@ export default class MindMapToolbar {
   }
 
   destroy() {
+    this.map.viewHistory?.destroy();
+    this.map.viewHistory = undefined;
     this.map.off('toolbarChange', this.update);
     this.map.off('mindMapChange', this.update);
     this.map.appEl.removeEventListener('input', this.update);

@@ -1,6 +1,8 @@
 // English
 
 export default {
+    'Previous viewing position': 'Previous viewing position',
+    'Next viewing position': 'Next viewing position',
     'Keyword color': 'Keyword color',
     'Add highlight keyword': 'Add highlight keyword',
     'Highlight keywords': 'Highlight keywords',
