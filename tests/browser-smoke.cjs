@@ -1285,7 +1285,11 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
                 renamePage:(id,name)=>events.push(['rename',id,name]),deletePage:id=>events.push(['delete',id])};
             window.pageTabsTest={tabs:new PageTabs(view,host),events,host,view};
         });
+        await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,30)));
         assert.equal(await page.locator('.mm-pages .mm-page-tab').count(),2);
+        assert.equal(await page.locator('.mm-page-list .mm-page-tab').count(),2);
+        assert.deepEqual(await page.evaluate(()=>[...document.querySelectorAll('.mm-page-controls button')].map(button=>button.getAttribute('aria-label'))),['Scroll pages left','Scroll pages right','New page','Page menu']);
+        assert.equal(await page.evaluate(()=>[...document.querySelectorAll('.mm-page-controls button')].every(button=>button.disabled===true||button.getAttribute('aria-label')==='New page'||button.getAttribute('aria-label')==='Page menu')),true);
         assert.equal(await page.locator('.mm-page-tab.is-active').textContent(),'Page 1');
         await page.locator('.mm-page-tab').nth(1).click();
         await page.locator('.mm-page-add').click();

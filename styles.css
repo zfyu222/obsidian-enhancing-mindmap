@@ -456,19 +456,27 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  overflow-x: auto;
+  gap: 6px;
+  padding: 3px 8px;
   background: var(--background-secondary);
-  border-bottom: 1px solid var(--background-modifier-border);
+  border-top: 1px solid var(--background-modifier-border);
+}
+.mm-page-list {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
   scrollbar-width: thin;
 }
+.mm-page-controls { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
 .mm-pages button.mm-page-tab {
   flex: 0 0 auto;
   max-width: 200px;
-  min-height: 28px;
-  padding: 3px 12px;
-  border-radius: 6px 6px 0 0;
+  min-height: 26px;
+  padding: 2px 12px;
+  border-radius: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -481,18 +489,33 @@
   background: var(--background-primary);
   color: var(--text-normal);
   font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--interactive-accent);
+  box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 }
+.mm-pages button.mm-page-scroll {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+  font-size: 16px;
+  line-height: 1;
+}
+.mm-pages button.mm-page-scroll:hover:not(:disabled) { background: var(--background-modifier-hover); color: var(--text-normal); }
 .mm-pages button.mm-page-add,
 .mm-pages button.mm-page-more {
   flex: 0 0 auto;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 26px;
+  min-height: 24px;
   padding: 0 6px;
+  background: transparent;
+  box-shadow: none;
 }
+.mm-pages button.mm-page-add:hover,
+.mm-pages button.mm-page-more:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .mm-pages input.mm-page-name {
   flex: 0 0 auto;
   width: 140px;
-  min-height: 28px;
+  min-height: 26px;
   padding: 2px 6px;
 }

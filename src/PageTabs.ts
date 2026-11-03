@@ -2,24 +2,32 @@ import { Menu } from 'obsidian';
 import { t } from './lang/helpers';
 import type { MindMapView } from './MindMapView';
 
-/** Page switcher above the canvas; one tab per page in document order. */
+/** Page switcher below the canvas; one tab per page in document order. */
 export default class PageTabs {
   element: HTMLElement;
+  private list: HTMLElement;
+  private prev: HTMLButtonElement | null = null;
+  private next: HTMLButtonElement | null = null;
   private renaming = '';
 
   constructor(private view: MindMapView, host: HTMLElement, after?: HTMLElement | null) {
     this.element = document.createElement('div');
     this.element.className = 'mm-pages';
-    this.element.setAttribute('role', 'tablist');
     this.element.setAttribute('aria-label', t('Mind map pages'));
     if (after?.parentNode === host) host.insertBefore(this.element, after.nextSibling);
-    else host.insertBefore(this.element, host.firstChild);
+    else host.appendChild(this.element);
     this.render();
   }
 
   render() {
     const active = this.view.activePageId;
     this.element.textContent = '';
+    this.list = document.createElement('div');
+    this.list.className = 'mm-page-list';
+    this.list.setAttribute('role', 'tablist');
+    this.list.setAttribute('aria-label', t('Mind map pages'));
+    this.list.addEventListener('scroll', () => this.updateScroll());
+    this.element.appendChild(this.list);
     this.view.pages.forEach(page => {
       if (this.renaming === page.meta.id) {
         const input = document.createElement('input');
@@ -38,7 +46,7 @@ export default class PageTabs {
           this.view.renamePage(page.meta.id, value);
           this.render();
         });
-        this.element.appendChild(input);
+        this.list.appendChild(input);
         setTimeout(() => { input.focus(); input.select(); }, 0);
         return;
       }
@@ -55,24 +63,49 @@ export default class PageTabs {
         event.preventDefault();
         this.menu(page.meta.id).showAtMouseEvent(event);
       });
-      this.element.appendChild(tab);
+      this.list.appendChild(tab);
       if (page.meta.id === active) setTimeout(() => this.reveal(tab), 0);
     });
+
+    const controls = document.createElement('div');
+    controls.className = 'mm-page-controls';
+    this.prev = this.scrollButton('‹', 'Scroll pages left', -1);
+    this.next = this.scrollButton('›', 'Scroll pages right', 1);
     const add = document.createElement('button');
     add.className = 'mm-page-add';
     add.setAttribute('aria-label', t('New page'));
     add.title = t('New page');
     add.textContent = '+';
     add.addEventListener('click', () => this.view.addPage());
-    this.element.appendChild(add);
-
     const more = document.createElement('button');
     more.className = 'mm-page-more';
     more.setAttribute('aria-label', t('Page menu'));
     more.title = t('Page menu');
     more.textContent = '⋯';
     more.addEventListener('click', event => this.menu(active).showAtMouseEvent(event));
-    this.element.appendChild(more);
+    controls.append(this.prev, this.next, add, more);
+    this.element.appendChild(controls);
+    setTimeout(() => this.updateScroll(), 0);
+  }
+
+  private scrollButton(label: string, title: string, direction: number): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.className = 'mm-page-scroll';
+    button.textContent = label;
+    button.title = t(title as any);
+    button.setAttribute('aria-label', t(title as any));
+    button.addEventListener('click', () => {
+      this.list.scrollBy({ left: direction * Math.max(120, Math.round(this.list.clientWidth * 0.6)), behavior: 'smooth' });
+    });
+    return button;
+  }
+
+  private updateScroll() {
+    if (!this.list) return;
+    const remaining = this.list.scrollWidth - this.list.clientWidth;
+    if (this.prev) this.prev.disabled = this.list.scrollLeft <= 1;
+    if (this.next) this.next.disabled = remaining <= 1 || this.list.scrollLeft >= remaining - 1;
+    this.element.classList.toggle('is-scrollable', remaining > 1);
   }
 
   private startRename(id: string) {
@@ -88,9 +121,12 @@ export default class PageTabs {
   }
 
   private reveal(tab: HTMLElement) {
-    const left = tab.offsetLeft, right = left + tab.offsetWidth;
-    if (left < this.element.scrollLeft) this.element.scrollLeft = left;
-    else if (right > this.element.scrollLeft + this.element.clientWidth) this.element.scrollLeft = right - this.element.clientWidth;
+    if (!this.list) return;
+    const tabRect = tab.getBoundingClientRect(), listRect = this.list.getBoundingClientRect();
+    if (!listRect.width) return;
+    if (tabRect.left < listRect.left) this.list.scrollLeft += tabRect.left - listRect.left - 4;
+    else if (tabRect.right > listRect.right) this.list.scrollLeft += tabRect.right - listRect.right + 4;
+    this.updateScroll();
   }
 
   destroy() {

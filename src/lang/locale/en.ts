@@ -7,6 +7,8 @@ export default {
     'Rename page': 'Rename page',
     'Delete page': 'Delete page',
     'Page menu': 'Page menu',
+    'Scroll pages left': 'Scroll pages left',
+    'Scroll pages right': 'Scroll pages right',
     'Keep at least one page': 'Keep at least one page',
     'Invalid page marker preserved': 'Invalid page marker preserved; the note was not split',
     'Virtual branches from the removed page were deleted': 'Virtual branches that referenced the removed page were deleted',

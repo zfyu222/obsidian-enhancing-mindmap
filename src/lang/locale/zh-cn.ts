@@ -7,6 +7,8 @@ export default {
   'Rename page': '重命名页面',
   'Delete page': '删除页面',
   'Page menu': '页面菜单',
+  'Scroll pages left': '向左滚动页面',
+  'Scroll pages right': '向右滚动页面',
   'Keep at least one page': '至少保留一个页面',
   'Invalid page marker preserved': '页面标记无效，已保留原文且未分页',
   'Virtual branches from the removed page were deleted': '引用已删除页面的虚拟分支已一并删除',

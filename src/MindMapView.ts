@@ -561,7 +561,7 @@ export class MindMapView extends TextFileView implements HoverParent {
     this.mindmap = new MindMap(mindData, viewport, this.plugin.settings);
     if (highlightState) this.mindmap.highlights?.set(highlightState.keywords, highlightState.wholeWord, highlightState.colors);
     this.toolbar = new MindMapToolbar(this.mindmap, this.contentEl);
-    this.pageTabs = new PageTabs(this, this.contentEl, this.toolbar.element);
+    this.pageTabs = new PageTabs(this, this.contentEl, body);
     this.panel = new MindMapPanel(this.mindmap, body, () => {
       const settings = (this.app as any).setting;
       settings.open(); settings.openTabById(this.plugin.manifest.id);
