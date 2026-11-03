@@ -16,6 +16,7 @@ import Exec from './Execute'
 import {uuid} from '../MindMapView'
 import { serializeSubtree, serializeForest, parseSubtree, clipboardAction } from './clipboard'
 import { selectionRoots, containsNode, selectionRect, intersectsRect } from './selection'
+import { treeMarkdown } from '../pages/serialize'
 
 import importXmind  from './import/xmindZen'
 import jsZip from 'jszip'
@@ -81,6 +82,8 @@ export default class MindMap {
     private renderRefreshTimer?: ReturnType<typeof setTimeout>;
     private disposed = false;
     view?: MindMapView;
+    /** Source subtrees that belong to other pages; used for cross-page graft projections. */
+    foreignNodes?: () => any[];
     colors: string[] = [];
     _dragNode: INode;
     exec: Exec;
@@ -303,6 +306,7 @@ export default class MindMap {
             }
         });
 
+        if (!snode) snode = this.foreignNodes?.().find((n: INode) => n.getId() == id) || null;
         return snode;
     }
 
@@ -2358,6 +2362,8 @@ export default class MindMap {
 
     addNode(node: INode, parent?: INode, index = -1) {
         if (parent) {
+            // Nodes under a source from another page are persisted there, not drawn here.
+            node.foreign = !!parent.foreign;
             parent.addChild(node, index);
             if (parent.direct) {
                 node.direct = parent.direct;
@@ -2368,6 +2374,7 @@ export default class MindMap {
     }
 
     _addNodeDom(node: INode) {
+        if (node.foreign) return;
         this.traverseBF((n: INode) => {
             if (!this.contentEL.contains(n.containEl)) {
                 this.contentEL.appendChild(n.containEl);
@@ -2618,31 +2625,12 @@ export default class MindMap {
         }
     }
 
+    getTreeMarkdown() {
+        return treeMarkdown(this.root, this.setting.headLevel);
+    }
+
     getMarkdown() {
-        const lines: string[] = [];
-        const level = this.setting.headLevel;
-        this.traverseDF((node: INode) => {
-            const text: string = node.data.text.trim();
-            const parts = text.split('\n');
-            const ending = ((node.data.stylePreset || node.data.nodeStyle) ? styleMarker(node.data.stylePreset, node.data.nodeStyle) : '') + ((node.data.summaryMember || node.data.relationMember || node.data.graftMember) ? ` <!-- mm:node ${JSON.stringify({id:node.getId()})} -->` : '');
-            if (node.getLevel() < level) {
-                const block = /^(```|~~~|\|)/.test(text);
-                lines.push('', '#'.repeat(node.getLevel()+1) + ' ' + (block ? '' : (parts.shift() || '')) + ending);
-                if (block) lines.push('');
-                lines.push(...parts);
-            } else {
-                const indent = '\t'.repeat(node.getLevel()-level);
-                // Metadata belongs on the structural list line, outside code fences/tables.
-                if (/^(```|~~~|\|)/.test(text)) {
-                    lines.push(`${indent}-${ending}`);
-                    parts.forEach(part => lines.push(`${indent}  ${part}`));
-                } else {
-                    lines.push(`${indent}-` + (text ? ' ' + (parts.shift() || '') : '') + ending);
-                    if (text) parts.forEach(part => lines.push(`${indent}  ${part}`));
-                }
-            }
-        }, this.root, true);
-        return [lines.join('\n').trim(), this.relations?.markdown(), this.grafts?.markdown(), this.summaries?.markdown()].filter(Boolean).join('\n\n');
+        return [this.getTreeMarkdown(), this.relations?.markdown(), this.grafts?.markdown(), this.summaries?.markdown()].filter(Boolean).join('\n\n');
     }
     scale(num: number) {
         if (num < 20) {

@@ -9,13 +9,15 @@ fs.mkdirSync(screenshotDir, { recursive: true });
 const source = ts.createSourceFile('main.js', fs.readFileSync(`${repo}/main.js`, 'utf8'), ts.ScriptTarget.Latest, true);
 const definitions = new Map();
 function visit(node) {
-    if (ts.isVariableDeclaration(node) && ['START','END'].includes(node.name.getText(source))) definitions.set(node.name.getText(source), 'const ' + node.getText(source) + ';');
+    if (ts.isVariableDeclaration(node) && ['START','END','PAGE_PREFIX','PAGE_PATTERN','ID_PATTERN','MAX_NAME'].includes(node.name.getText(source))) definitions.set(node.name.getText(source), 'const ' + node.getText(source) + ';');
     if ((ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node)) && node.name) definitions.set(node.name.text, node.getText(source));
     ts.forEachChild(node, visit);
 }
 visit(source);
 const names = ['isSearchResultState','searchRequest','sourceNodeAtLine','sameSourceTree','resolveSearchNode','centerSearchNode','SearchNavigation','validateRelations','extractRelations','relationsMarkdown','relationCurve','RelationManager','renderDefaultNodeStyleSettings', 'normalizeNodeBoxStyle', 'renderNodeBoxControls', 'normalizeNodeStyle', 'effectiveNodeStyle', 'snapshotNodeStyle', 'validPresetName', 'normalizePresets', 'findPreset', 'renamePreset', 'styleMarker', 'readStyleMarker', 'applyNodeStyle', 'MindMapPanel', 'renderStylePresetSettings', 'renderPresetColorPicker', 'keepLastIndex', '__awaiter', 'uuid', 'selectionRoots', 'containsNode', 'selectionRect', 'intersectsRect', 'clipboardAction', 'serializeForest', 'parseSubtree', 'Command', 'StyleNodes', 'ChangeNodeStyle', 'Layout', 'AddNode', 'ChangeNodeText', 'RemoveNodes', 'MoveNodes', 'PasteNode', 'History', 'Exec', 'MindMap', 'MindMapToolbar', 'SummaryTransaction', 'SummaryManager', 'validateSummary', 'summaryMarkdown', 'extractSummaries', 'START', 'END', 'TextFormatMenu', 'formatSelection', 'applyEditorStyle', 'editorSelection', 'selectEditorOffsets'];
 names.push('GraftManager','validateGrafts','extractGrafts','graftsMarkdown','validGraftGraph','CollapseNode','ExpandNode');
+names.push('treeMarkdown','splitPages','parseMarker','newPageId','cleanPageName','PAGE_PREFIX','PAGE_PATTERN','ID_PATTERN','MAX_NAME','S4');
+names.push('PageTabs');
 names.push('keywordMatches','keywordSpans','keywordTextColor','KeywordHighlighter');
 names.push('ViewHistory');
 names.push('normalizeViewHistoryOptions','renderViewHistorySettings');
@@ -37,7 +39,8 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             const cmd = { AddNode, ChangeNodeText, RemoveNodes, MoveNodes, PasteNode, CollapseNode, ExpandNode };
             const randomColor = () => '#90a4bc';
             const t = text => text;
-            const obsidian = { Notice: class { constructor(message) { window.lastNotice = message; } }, MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } } };
+            const obsidian = { Notice: class { constructor(message) { window.lastNotice = message; } }, MarkdownRenderer: { renderMarkdown: async (text, element) => { element.textContent = text; } },
+                Menu: class { constructor() { this.items = []; } addItem(build) { const item = { title: '', setTitle(value) { item.title = value; return item; }, setIcon() { return item; }, onClick(fn) { item.fn = fn; return item; } }; build(item); this.items.push(item); return this; } showAtMouseEvent() { window.lastMenu = this.items; } } };
             const MindMapView = class {};
             const ProdNode = ${Array.from(definitions.values()).find(text => text.includes('select(preserveSelection = false)'))};
             class Node {
@@ -101,7 +104,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             map.appEl.addEventListener('contextmenu',e=>{map.appContextMenu(e);window.lastContextPrevented=e.defaultPrevented;},true);
             HTMLElement.prototype.hasClass=function(c){return this.classList.contains(c)};
             window.testMap=map;window.testNodes={a,child,b,target};
-            Object.assign(window,{SearchNavigation,centerSearchNode,RelationManager,extractRelations,relationsMarkdown,relationCurve,Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset});
+            Object.assign(window,{SearchNavigation,centerSearchNode,RelationManager,extractRelations,relationsMarkdown,relationCurve,Layout,SummaryManager,MindMap,MindMapToolbar,MindMapPanel,renderDefaultNodeStyleSettings,renderStylePresetSettings,extractSummaries,editorSelection,selectEditorOffsets,findPreset,PageTabs,treeMarkdown,splitPages,extractGrafts});
             window.installToolbar=()=>{
                 const host=document.createElement('div');host.className='view-content mm-view';
                 host.style.cssText='height:480px;width:1050px;margin:16px';
@@ -1273,6 +1276,34 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.evaluate(()=>keywordPanel.destroy());
         console.log('Keyword highlights: literal whole-word default, substring toggle, native selection/markup, async changes, hidden/editing exclusion, legacy fallback, panel add/delete/dedup, virtual mirrors and unchanged Markdown/history passed.');
         console.log('Virtual branches: toolbar graft/detach, native editing and live preview, shared styles/additions, folding, real layout collision check, persistence, root/source deletion and undo/redo passed.');
+        await page.evaluate(()=>{
+            const host=document.createElement('div');host.id='pages-host';host.style.cssText='position:relative;width:600px';document.body.appendChild(host);
+            const makePage=(id,name)=>({meta:{id,name},content:'# '+name,tree:'# '+name,relations:{entries:[],preserved:'',raw:''},summaries:{entries:[],preserved:'',raw:''},relationsMarkdown:'',summariesMarkdown:''});
+            const events=[];
+            const view={app:{},pages:[makePage('p1','Page 1'),makePage('p2','Page 2')],activePageId:'p1',
+                setActivePage:id=>events.push(['switch',id]),addPage:()=>events.push(['add']),
+                renamePage:(id,name)=>events.push(['rename',id,name]),deletePage:id=>events.push(['delete',id])};
+            window.pageTabsTest={tabs:new PageTabs(view,host),events,host,view};
+        });
+        assert.equal(await page.locator('.mm-pages .mm-page-tab').count(),2);
+        assert.equal(await page.locator('.mm-page-tab.is-active').textContent(),'Page 1');
+        await page.locator('.mm-page-tab').nth(1).click();
+        await page.locator('.mm-page-add').click();
+        assert.deepEqual(await page.evaluate(()=>window.pageTabsTest.events),[['switch','p2'],['add']]);
+        await page.locator('.mm-page-tab').first().dblclick();
+        await page.locator('.mm-pages input.mm-page-name').fill('Renamed');
+        await page.locator('.mm-pages input.mm-page-name').press('Enter');
+        assert.deepEqual(await page.evaluate(()=>window.pageTabsTest.events.at(-1)),['rename','p1','Renamed']);
+        assert.equal(await page.locator('.mm-pages input.mm-page-name').count(),0);
+        await page.locator('.mm-page-tab').first().click({button:'right'});
+        assert.equal(await page.evaluate(()=>window.lastMenu.length),2);
+        assert.deepEqual(await page.evaluate(()=>window.lastMenu.map(item=>item.title)),['Rename page','Delete page']);
+        await page.evaluate(()=>window.lastMenu[1].fn());
+        assert.deepEqual(await page.evaluate(()=>window.pageTabsTest.events.at(-1)),['delete','p1']);
+        await page.screenshot({path:path.join(screenshotDir,'page-tabs.png')});
+        await page.evaluate(()=>window.pageTabsTest.tabs.destroy());
+        assert.equal(await page.locator('.mm-pages').count(),0);
+        console.log('Page tabs: render, active tab, native switch/add clicks, inline rename and context menu delete passed.');
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');

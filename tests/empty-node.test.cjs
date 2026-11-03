@@ -21,7 +21,7 @@ const obsidian = { TextFileView: class {}, MarkdownRenderer: {
 const { default: Node } = load('src/mindmap/INode.ts', { obsidian });
 const commands = load('src/mindmap/Cmds.ts');
 const { default: History } = load('src/mindmap/History.ts');
-const { default: MindMap } = load('src/mindmap/mindmap.ts');
+const { default: MindMap } = load('src/mindmap/mindmap.ts', { '../pages/serialize': require('./pages-serialize.cjs') });
 const { MindMapView } = load('src/MindMapView.ts', {
     obsidian, './markmapLib/markmap-lib': parser, './summary/markdown': load('src/summary/markdown.ts')
 });

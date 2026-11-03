@@ -3,9 +3,10 @@ function load(file,deps={},globals={}){const module={exports:{}};vm.runInNewCont
 const constants=load('src/constants.ts'),styles=load('src/nodeStyles.ts');
 const markdown=load('src/summary/markdown.ts',{'../nodeStyles':styles});
 const relations=load('src/relations/model.ts');
-const navigation=load('src/search/navigation.ts',{'../summary/markdown':markdown,'../relations/model':relations});
+const pages=load('src/pages/model.ts');
+const navigation=load('src/search/navigation.ts',{'../summary/markdown':markdown,'../relations/model':relations,'../pages/model':pages});
 const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');
-const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{setEphemeralState(){}},Platform:{}},'./markmapLib/markmap-lib':parser,'./constants':constants,'./summary/markdown':markdown,'./relations/model':relations,'./search/navigation':navigation}).MindMapView;
+const View=load('src/MindMapView.ts',{obsidian:{TextFileView:class{setEphemeralState(){}},Platform:{}},'./markmapLib/markmap-lib':parser,'./constants':constants,'./summary/markdown':markdown,'./relations/model':relations,'./pages/model':pages,'./search/navigation':navigation}).MindMapView;
 function parsingView(){return {getMdText:View.prototype.getMdText,mdToData:View.prototype.mdToData};}
 function fixture(raw){
  const view=Object.assign(parsingView(),{data:raw,file:{path:'map.md'},searchReady:true});

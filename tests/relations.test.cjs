@@ -23,7 +23,7 @@ const commands=load('src/mindmap/Cmds.ts',{'./selection':selection,'./INode':{de
 const History=load('src/mindmap/History.ts').default;
 const Exec=load('src/mindmap/Execute.ts',{'./History':{default:History},'./Cmds':commands,'../MindMapView':{uuid},'../lang/helpers':{t:x=>x},'./INode':{default:Node}}).default;
 const Manager=load('src/summary/manager.ts',{'../mindmap/INode':{default:Node},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'./markdown':markdown,'./model':model,'../lang/helpers':{t:x=>x}}).default;
-const MindMap=load('src/mindmap/mindmap.ts',{'./selection':selection,'./clipboard':clip,'../MindMapView':{uuid}}).default;
+const MindMap=load('src/mindmap/mindmap.ts',{'../pages/serialize':require('./pages-serialize.cjs'),'./selection':selection,'./clipboard':clip,'../MindMapView':{uuid}}).default;
 const Relations=load('src/relations/manager.ts',{obsidian:{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x},'./model':relationModel}).default;
 function fixture(){const map=Object.create(MindMap.prototype);Object.assign(map,{exec:new Exec(),setting:{headLevel:1},selectedNodes:[],_menuDom:{style:{}},emit(){},refresh(){},contentEL:{contains(){return false},appendChild(){},removeChild(){}},appEl:{focus(){}},edgeGroup:{group(){return{clear(){}}}}});map.root=new Node({id:'root',text:'Root',isRoot:true},map);map.summaries=new Manager(map);map.relations=new Relations(map);const add=(text,parent=map.root)=>{const n=new Node({id:uuid(),text},map);parent.addChild(n);return n};const a=add('A'),b=add('B'),c=add('C');return{map,a,b,c,add};}
 const json=x=>JSON.parse(JSON.stringify(x));

@@ -63,10 +63,12 @@ test('view receives ephemeral state and the existing leaf routing preserves the 
 test('rapid file renders discard obsolete initialization and closing a view cancels queued work',async()=>{
  const maps=[],flushed=[];
  class FakeMap{constructor(data){this.data=data;this.summaries={load(){}};this.relations={load(){}};this.grafts={load(){}};maps.push(this);}init(){this.inits=(this.inits||0)+1;this.root={};}refresh(){}clear(){this.cleared=true;}}
- class Control{update(){}destroy(){}}
- const el=()=>({innerHTML:'',classList:{add(){}},appendChild(){}});
+ class Control{update(){}destroy(){}render(){}}
+ const el=()=>({innerHTML:'',textContent:'',className:'',classList:{add(){},contains(){return false},toggle(){}},style:{},appendChild(){},insertBefore(){},addEventListener(){},removeEventListener(){},remove(){},setAttribute(){},querySelector(){return null},scrollLeft:0,clientWidth:0,offsetLeft:0,offsetWidth:0});
  const parser=require('../src/markmapLib/markmap-lib/dist/browser/index.js');
- const ScopedView=load('src/MindMapView.ts',{obsidian:{TextFileView:class{},Platform:{}},'./markmapLib/markmap-lib':parser,'./constants':constants,'./summary/markdown':markdown,'./relations/model':relations,'./mindmap/mindmap':{default:FakeMap},'./MindMapToolbar':{default:Control},'./MindMapPanel':{default:Control}},{document:{createElement:el}}).MindMapView;
+ const pagesModel=load('src/pages/model.ts');
+ const pagesDocument=load('src/pages/document.ts',{'../relations/model':relations,'../summary/markdown':markdown,'./model':pagesModel});
+ const ScopedView=load('src/MindMapView.ts',{obsidian:{TextFileView:class{},Platform:{}},'./markmapLib/markmap-lib':parser,'./constants':constants,'./summary/markdown':markdown,'./relations/model':relations,'./pages/model':pagesModel,'./pages/document':pagesDocument,'./PageTabs':{default:Control},'./lang/helpers':{t:x=>x},'./mindmap/mindmap':{default:FakeMap},'./MindMapToolbar':{default:Control},'./MindMapPanel':{default:Control}},{document:{createElement:el}}).MindMapView;
  const view=Object.create(ScopedView.prototype);Object.assign(view,{firstInit:true,renderGeneration:0,colors:[],plugin:{settings:{}},contentEl:el(),file:{path:'first.md'},app:{metadataCache:{getFileCache:()=>({})}},searchNavigation:{beginRender(){},flush(){flushed.push(view.data)},clear(){}}});view.leaf={view};
  view.setViewData('# First');view.file={path:'second.md'};view.setViewData('# Second');
  await new Promise(resolve=>setTimeout(resolve,140));assert.equal(maps[0].inits,undefined);assert.equal(maps[1].inits,1);assert.deepEqual(flushed,['# Second']);

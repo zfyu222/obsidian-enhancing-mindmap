@@ -1,6 +1,15 @@
 // 简体中文
 
 export default {
+  'Page': '页面',
+  'Mind map pages': '思维导图页面',
+  'New page': '新建页面',
+  'Rename page': '重命名页面',
+  'Delete page': '删除页面',
+  'Page menu': '页面菜单',
+  'Keep at least one page': '至少保留一个页面',
+  'Invalid page marker preserved': '页面标记无效，已保留原文且未分页',
+  'Virtual branches from the removed page were deleted': '引用已删除页面的虚拟分支已一并删除',
   'Viewing position history': '观看位置历史',
   'Viewing idle time (seconds)': '观看位置停留时间（秒）',
   'Viewing idle time description': '画布停止移动多久后记录观看位置，范围 0.5–60 秒，默认 5 秒。',

@@ -58,6 +58,7 @@ const { default: Exec } = load('src/mindmap/Execute.ts', {
     '../MindMapView': { uuid: id }, '../lang/helpers': { t: text => text }
 });
 const { default: MindMap } = load('src/mindmap/mindmap.ts', {
+    '../pages/serialize': require('./pages-serialize.cjs'),
     './clipboard': clipboard, './selection': selection, '../MindMapView': { uuid: id }, './INode': { default: Node }, obsidian: { Notice: class { constructor(text) { notices.push(text); } } }
 });
 function fixture() {

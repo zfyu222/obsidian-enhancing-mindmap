@@ -32,6 +32,8 @@ export default class GraftManager {
         const nodes: any[] = [];
         this.map.traverseDF((node: any) => nodes.push(node));
         this.map.summaries?.all((node: any) => nodes.push(node));
+        // Detached sources from other pages only take part in validation and projections.
+        (this.map.foreignNodes?.() || []).forEach((node: any) => nodes.push(node));
         return nodes;
     }
     snapshot() { return validateGrafts(this.items); }
@@ -63,7 +65,9 @@ export default class GraftManager {
     canMove(nodes: any[], destination: any) {
         return !this.items.length || validGraftGraph(this.originals(), this.items, nodes, destination);
     }
-    cancel() { this.pending = ''; this.map.emit('toolbarChange'); }
+    /** The view keeps a pending source across page switches. */
+    notifyPending() { (this.map.view as any)?.graftPendingChanged?.(this.pending); }
+    cancel() { this.pending = ''; this.notifyPending(); this.map.emit('toolbarChange'); }
     begin() {
         if (this.preserved || this.map.isComposing) return;
         if (this.pending) { this.cancel(); return; }
@@ -72,6 +76,7 @@ export default class GraftManager {
         if (nodes.length !== 1) return;
         this.map.relations?.cancel();
         this.pending = this.original(nodes[0]).getId();
+        this.notifyPending();
         this.map.emit('toolbarChange'); new Notice(t('Click the node to graft under; Escape cancels'));
     }
     create(source: string, target: string) {
@@ -80,11 +85,13 @@ export default class GraftManager {
         const item = { id: uuid(), source, target };
         if (this.preserved || this.map.isComposing || this.items.length >= 1000 || this.items.some(link => link.source === source && link.target === target) ||
             !validGraftGraph(nodes, [...this.items, item])) {
+            this.notifyPending();
             new Notice(t('Virtual branch would be cyclic, duplicated or too large')); this.map.emit('toolbarChange'); return;
         }
         const manager = this;
         this.map.exec.history.execute({ name: 'addGraft', execute() { manager.items.push(item); return true; },
             undo() { manager.items = manager.items.filter(link => link.id !== item.id); }, redo() { this.execute(); } } as any);
+        this.notifyPending();
     }
     removeSelected() {
         this.map.finishEditingForHistory();
@@ -159,9 +166,13 @@ export default class GraftManager {
             return mirror;
         };
         const renderable = validGraftGraph(Array.from(byId.values()), this.items);
+        // Only targets drawn on this page can host a projection; other pages own theirs.
+        const local = new Set<string>();
+        this.map.traverseDF((node: any) => local.add(node.getId()));
+        this.map.summaries?.all((node: any) => local.add(node.getId()));
         (renderable ? this.items : []).forEach(link => {
             const source = byId.get(link.source), target = byId.get(link.target);
-            if (source && target) this.roots.push({ link, node: build(source, target, link, link.id, true), target });
+            if (source && target && local.has(link.target)) this.roots.push({ link, node: build(source, target, link, link.id, true), target });
         });
         if (renderable) this.items.forEach(link => { link.folds = Array.from(states.get(link.id)!.entries()).filter(([key]) => usedFolds.get(link.id)!.has(key)).map(([, fold]) => fold); });
         this.markers();
@@ -209,7 +220,8 @@ export default class GraftManager {
             const source = node.virtualSource;
             // Ordinary projected descendants do not each need a source link.
             // A nested graft has a different visual parent from its true parent.
-            if (!source || (!node.virtualRoot && node.parent?.virtualSource === source.parent) || !node.isShow() || !source.isShow()) return;
+            // Sources on another page have no node on this canvas to point at.
+            if (!source || source.foreign || (!node.virtualRoot && node.parent?.virtualSource === source.parent) || !node.isShow() || !source.isShow()) return;
             const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('class', 'mm-graft-source-line');
             path.setAttribute('data-source-id', source.getId());

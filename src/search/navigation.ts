@@ -1,6 +1,7 @@
 import { extractSummaries } from '../summary/markdown';
 import { extractRelations } from '../relations/model';
 import { extractGrafts } from '../grafts/model';
+import { splitPages } from '../pages/model';
 
 export function isSearchResultState(state: any) {
     return !!state && typeof state.match?.content === 'string' && Array.isArray(state.match.matches);
@@ -19,9 +20,14 @@ export function sourceNodeAtLine(raw: string, line: number, view: any): any {
     const body=view.getMdText(raw);if(!body)return null;
     const offset=raw.trimEnd().length-body.length;
     if(offset<0||raw.slice(offset,offset+body.length)!==body)return null;
-    const base=raw.slice(0,offset).split('\n').length-1,local=line-base;if(local<0)return null;
+    const base=raw.slice(0,offset).split('\n').length-1,global=line-base;if(global<0)return null;
+    // Search results carry line numbers for the whole file; map them to their page first.
+    const pages=splitPages(body).pages;
+    const page=pages.find(item=>{const count=item.raw.split('\n').length;return global>=item.startLine&&global<item.startLine+count;})||pages[pages.length-1];
+    if(!page)return null;
+    const pageId=page.meta.id,local=global-page.startLine;
     let fence='', metadata=false;
-    const masked=body.split('\n').map((line:string,index:number)=>{
+    const masked=page.raw.split('\n').map((line:string,index:number)=>{
         const delimiter=/^\s*(`{3,}|~{3,})/.exec(line);
         if(delimiter){if(!fence)fence=delimiter[1][0];else if(delimiter[1][0]===fence)fence='';}
         const marker=!fence&&!delimiter&&(line.startsWith('<!-- mm:relations ')||line.startsWith('<!-- mm:grafts '));
@@ -32,7 +38,7 @@ export function sourceNodeAtLine(raw: string, line: number, view: any): any {
     const summaries=extractSummaries(masked),main=view.mdToData(summaries.main,true);
     let found:any=null;
     const visit=(node:any,path:number[])=>{
-        if(local>=node.sourceStartLine&&node.sourceStartLine>=0&&local<node.sourceEndLine)found={kind:'main',path,node,main};
+        if(local>=node.sourceStartLine&&node.sourceStartLine>=0&&local<node.sourceEndLine)found={kind:'main',path,node,main,pageId};
         (node.children||[]).forEach((child:any,index:number)=>visit(child,[...path,index]));
     };visit(main,[]);
     if(found)return found;
@@ -48,14 +54,14 @@ export function sourceNodeAtLine(raw: string, line: number, view: any): any {
             const heading=/^### .*<!-- mm:summary (\{.*\}) -->\s*$/.exec(text);
             const item=/^( *)- (.*)$/.exec(text);
             if(heading){
-                try{const id=JSON.parse(heading[1]).id;entry=entries.get(id);current=entry?{kind:'summary',summaryId:id,path:[],node:entry.root,main,summaryRoot:entry.root}:null;paths=[];counts=new Map();}catch(_){current=null;}
+                try{const id=JSON.parse(heading[1]).id;entry=entries.get(id);current=entry?{kind:'summary',summaryId:id,path:[],node:entry.root,main,pageId,summaryRoot:entry.root}:null;paths=[];counts=new Map();}catch(_){current=null;}
             }else if(item&&entry){
                 const depth=item[1].length/2,parent=depth?paths[depth-1]:[];
                 if(!parent){current=null;continue;}
                 const key=parent.join('.'),next=counts.get(key)||0;counts.set(key,next+1);
                 const path=[...parent,next];paths[depth]=path;paths.length=depth+1;
                 let node=entry.root;path.forEach(i=>node=node?.children[i]);
-                current=node?{kind:'summary',summaryId:entry.id,path,node,main,summaryRoot:entry.root}:null;
+                current=node?{kind:'summary',summaryId:entry.id,path,node,main,pageId,summaryRoot:entry.root}:null;
             }else if(text.startsWith('<!-- mm:summaries:')||text==='## 概括子树区'){current=null;}
             if((heading||item)&&current){const delimiter=/^\s*(`{3,}|~{3,})/.exec(current.node.text);if(delimiter)fence=delimiter[1][0];continue;}
         }
@@ -68,11 +74,14 @@ export function sameSourceTree(a:any,b:any):boolean {
 }
 export function resolveSearchNode(view:any,request:NonNullable<ReturnType<typeof searchRequest>>) {
     const raw=request.content ?? view.data,target=sourceNodeAtLine(raw,request.line,view);if(!target)return null;
-    const map=view.mindmap;
+    // A hit on another page must be shown there before the node can be selected.
+    if(typeof view.setActivePage==='function'&&target.pageId&&view.activePageId&&target.pageId!==view.activePageId)view.setActivePage(target.pageId);
+    const map=view.mindmap;if(!map?.root)return null;
     const stable=target.kind==='summary'||target.node.summaryMember||target.node.expanded===false;
     if(stable){const matches:any[]=[];map.traverseAll((node:any)=>{if(node.getId()===target.node.id)matches.push(node);});if(matches.length===1)return matches[0];}
     let node=target.kind==='summary'?map.summaries?.items.find((item:any)=>item.id===target.summaryId)?.root:map.root;
-    const currentBody=extractSummaries(extractRelations(extractGrafts(view.getMdText(view.data)).main).main);
+    const pageContent=typeof view.activePage==='function'?view.activePage()?.content:undefined;
+    const currentBody=pageContent!==undefined?extractSummaries(extractRelations(pageContent).main):extractSummaries(extractRelations(extractGrafts(view.getMdText(view.data)).main).main);
     const currentTree=target.kind==='summary'?currentBody.entries.find(entry=>entry.id===target.summaryId)?.root:view.mdToData(currentBody.main,true);
     if(raw.replace(/\r\n/g,'\n')===view.data.replace(/\r\n/g,'\n')||sameSourceTree(target.kind==='summary'?target.summaryRoot:target.main,currentTree)){
         target.path.forEach((index:number)=>node=node?.children[index]);
@@ -102,17 +111,19 @@ export class SearchNavigation {
         if(map.isComposing)return;
         map.finishEditingForHistory();
         const node=resolveSearchNode(view,pending.request);if(!node)return;
-        map.relations?.cancel();map.textFormatMenu?.close();
+        // resolveSearchNode may switch to the page that owns the hit.
+        const active=view.mindmap;if(!active)return;
+        active.relations?.cancel();active.textFormatMenu?.close();
         const expand=(n:any)=>{const parents:any[]=[];for(let p=n.parent;p;p=p.parent)parents.unshift(p);parents.forEach(p=>{if(!p.isExpand)p.expand();});};
         expand(node);
-        if(node.data.summaryTree){const item=map.summaries?.items.find((entry:any)=>entry.id===node.data.summaryTree);item?.memberIds.forEach((id:string)=>{const member=map.getNodeById(id);if(member)expand(member);});}
+        if(node.data.summaryTree){const item=active.summaries?.items.find((entry:any)=>entry.id===node.data.summaryTree);item?.memberIds.forEach((id:string)=>{const member=active.getNodeById(id);if(member)expand(member);});}
         const panel=view.panel;if(panel?.element.classList.contains('mm-mobile-panel')&&!panel.element.hidden)panel.toggle();
-        map.refresh();map.setSelectedNodes([node],node);centerSearchNode(map,node);
+        active.refresh();active.setSelectedNodes([node],node);centerSearchNode(active,node);
         const file=view.file?.path;
-        const center=()=>{if(view.mindmap===map&&view.file?.path===file&&map.getNodeById(node.getId())===node)centerSearchNode(map,node);};
-        const doc=map.appEl.ownerDocument,win=doc?.defaultView;
+        const center=()=>{if(view.mindmap===active&&view.file?.path===file&&active.getNodeById(node.getId())===node)centerSearchNode(active,node);};
+        const doc=active.appEl.ownerDocument,win=doc?.defaultView;
         if(win){const frame=win.requestAnimationFrame(center);this.cleanup.push(()=>win.cancelAnimationFrame(frame));}
         for(const delay of [120,400]){const timer=setTimeout(center,delay);this.cleanup.push(()=>clearTimeout(timer));}
-        const stop=()=>this.stop();for(const event of ['pointerdown','wheel','keydown']){map.appEl.addEventListener(event,stop,true);this.cleanup.push(()=>map.appEl.removeEventListener(event,stop,true));}
+        const stop=()=>this.stop();for(const event of ['pointerdown','wheel','keydown']){active.appEl.addEventListener(event,stop,true);this.cleanup.push(()=>active.appEl.removeEventListener(event,stop,true));}
     }
 }

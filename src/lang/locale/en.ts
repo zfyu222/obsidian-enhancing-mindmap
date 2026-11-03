@@ -1,6 +1,15 @@
 // English
 
 export default {
+    'Page': 'Page',
+    'Mind map pages': 'Mind map pages',
+    'New page': 'New page',
+    'Rename page': 'Rename page',
+    'Delete page': 'Delete page',
+    'Page menu': 'Page menu',
+    'Keep at least one page': 'Keep at least one page',
+    'Invalid page marker preserved': 'Invalid page marker preserved; the note was not split',
+    'Virtual branches from the removed page were deleted': 'Virtual branches that referenced the removed page were deleted',
     'Viewing position history': 'Viewing position history',
     'Viewing idle time (seconds)': 'Viewing idle time (seconds)',
     'Viewing idle time description': 'Record a viewing position after the canvas stops moving for this long (0.5–60 seconds). Default: 5.',

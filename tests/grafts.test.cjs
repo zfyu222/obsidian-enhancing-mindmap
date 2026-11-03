@@ -17,7 +17,7 @@ const History=load('src/mindmap/History.ts').default;
 const Exec=load('src/mindmap/Execute.ts',{'./History':{default:History},'./Cmds':commands,'./INode':{default:Node},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
 const Summaries=load('src/summary/manager.ts',{'./markdown':{summaryMarkdown:()=>''},'../mindmap/INode':{default:Node},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
 const Grafts=load('src/grafts/manager.ts',{'./model':model,'../mindmap/INode':{default:Node},'../mindmap/Cmds':commands,'../nodeStyles':{applyNodeStyle(node){node.styleApplies=(node.styleApplies||0)+1}},'obsidian':{Notice:class{}},'../MindMapView':{uuid},'../lang/helpers':{t:x=>x}}).default;
-const MindMap=load('src/mindmap/mindmap.ts',{'./selection':selection,'./clipboard':clip,'../MindMapView':{uuid}}).default;
+const MindMap=load('src/mindmap/mindmap.ts',{'../pages/serialize':require('./pages-serialize.cjs'),'./selection':selection,'./clipboard':clip,'../MindMapView':{uuid}}).default;
 const json=value=>JSON.parse(JSON.stringify(value));
 function fixture(){const map=Object.create(MindMap.prototype);Object.assign(map,{exec:new Exec(),setting:{headLevel:1},selectedNodes:[],_menuDom:{style:{}},emit(){},refresh(){if(this.grafts)this.grafts.withTrees(()=>{});},contentEL:{contains(){return false},appendChild(){}},appEl:{focus(){}},edgeGroup:{group(){return{clear(){}}}}});
  map.root=new Node({id:'root',text:'Root',isRoot:true},map);map.summaries=new Summaries(map);map.grafts=new Grafts(map);

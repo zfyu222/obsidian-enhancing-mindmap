@@ -61,6 +61,8 @@ export default class Node {
     virtualRoot?: boolean;
     virtualPath?: string[];
     virtualPreview?: boolean;
+    /** Detached source subtree loaded from another page; never laid out on the canvas. */
+    foreign?: boolean;
     containEl:HTMLElement;
     contentEl:HTMLElement;
     box:BOX = {
