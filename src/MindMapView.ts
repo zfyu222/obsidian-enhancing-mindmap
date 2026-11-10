@@ -194,7 +194,9 @@ export class MindMapView extends TextFileView implements HoverParent {
           snapshot.width * snapshot.height * scale * scale > 64000000) {
         throw new Error(t('Image too large; use a lower resolution or fold branches'));
       }
-      const options = { scale, quality: 1, bgcolor: getComputedStyle(map.contentEL).backgroundColor };
+      await snapshot.ready();
+      const options = { scale, quality: 1, bgcolor: snapshot.background,
+        filter: (node: Node) => node.nodeType !== 1 || node.ownerDocument!.defaultView!.getComputedStyle(node as Element).display !== 'none' };
       const dataUrl = await (format === 'png' ? domtoimage.toPng(snapshot.element, options) : domtoimage.toJpeg(snapshot.element, options));
       const manager = this.app.fileManager as FileManager & {
         getAvailablePathForAttachment?: (filename: string, sourcePath: string) => Promise<string>;

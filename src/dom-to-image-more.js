@@ -110,7 +110,12 @@
             .then(applyOptions)
             .then(makeSvgDataUri)
             .then(restoreWrappers)
-            .then(clearCache);
+            .then(clearCache)
+            .catch(function (error) {
+                restoreWrappers(null);
+                clearCache();
+                throw error;
+            });
 
         function ensureElement(node) {
             if (node.nodeType === ELEMENT_NODE) return node;
@@ -1197,10 +1202,10 @@
                 return Promise.resolve(element.src)
                     .then(get || util.getAndEncode)
                     .then(function (dataUrl) {
-                        return new Promise(function (resolve) {
+                        if (!dataUrl) throw new Error('Failed to embed image: ' + element.src);
+                        return new Promise(function (resolve, reject) {
                             element.onload = resolve;
-                            // for any image with invalid src(such as <img src />), just ignore it
-                            element.onerror = resolve;
+                            element.onerror = function () { reject(new Error('Failed to decode embedded image')); };
                             element.src = dataUrl;
                         });
                     });
