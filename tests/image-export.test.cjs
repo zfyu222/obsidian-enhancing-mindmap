@@ -12,14 +12,15 @@ function fixture() {
  const View=load('src/MindMapView.ts',{
   obsidian:{TextFileView:class{},Notice:class{constructor(text){notices.push(text)}}},
   './markmapLib/markmap-lib':{Transformer:class{}},
+  './html-export':{standaloneHtml:()=>'<!doctype html>example'},
   './lang/helpers':{t:x=>x},'./image-export':{imageFilename,imageSnapshot:()=>snapshot},
-  './dom-to-image-more.js':{default:{toPng:async()=>{rendered++;return 'data:image/png;base64,aGVsbG8='}}}
+  './dom-to-image-more.js':{default:{toPng:async()=>{rendered++;return 'data:image/png;base64,aGVsbG8='},toSvg:async(el,options)=>{options.onclone({});return 'svg'}}}
  }).MindMapView;
  const view=Object.create(View.prototype);
  view.mindmap={root:{},contentEL:{},finishEditingForHistory(){}};
  view.file={path:'Raw/Note.md'};
  view.pageDocument={pages:[{},{}],active:()=>({meta:{name:'Page A'}})};
- view.app={fileManager:{getAvailablePathForAttachment:async name=>'Assets/'+name},vault:{createBinary:async(path,bytes)=>writes.push({path,bytes})}};
+ view.app={fileManager:{getAvailablePathForAttachment:async name=>'Assets/'+name},vault:{create:async(path,text)=>writes.push({path,text}),createBinary:async(path,bytes)=>writes.push({path,bytes})}};
  return {view,snapshot,notices,writes,get removed(){return removed},get rendered(){return rendered}};
 }
 test('export uses attachment API, page name and binary bytes then cleans up',async()=>{
@@ -41,4 +42,18 @@ test('large images are rejected before rendering and concurrent exports are igno
  f.snapshot.width=100;
  await Promise.all([f.view.exportToPng(1),f.view.exportToPng(1)]);
  assert.equal(f.writes.length,1);assert.equal(f.removed,2);
+});
+
+test('HTML saves native markup via attachment API without raster size limits',async()=>{
+ const f=fixture();f.snapshot.width=40000;await f.view.exportToHtml();
+ assert.equal(f.writes[0].path,'Assets/Note-Page A.html');
+ assert.match(f.writes[0].text,/<!doctype html>/);
+ assert.equal(f.rendered,0);assert.equal(f.removed,1);
+ assert.equal(f.view.exportingImage,false);
+});
+test('HTML write failures clean up and permit retry',async()=>{
+ const f=fixture(),save=f.view.app.vault.create;
+ f.view.app.vault.create=async()=>{throw new Error('disk full')};
+ await f.view.exportToHtml();assert.equal(f.removed,1);assert.match(f.notices[0],/HTML export failed.*disk full/);
+ f.view.app.vault.create=save;await f.view.exportToHtml();assert.equal(f.writes.length,1);
 });

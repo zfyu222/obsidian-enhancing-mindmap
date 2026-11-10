@@ -1107,7 +1107,7 @@ export default class MindMapPlugin extends Plugin {
       callback: () => {
         const mindmapView = this.app.workspace.getActiveViewOfType(MindMapView);
         if(mindmapView){
-            mindmapView.exportToSvg();
+            mindmapView.exportToHtml();
         }
       }
     });

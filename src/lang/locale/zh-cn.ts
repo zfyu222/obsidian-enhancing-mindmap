@@ -1,6 +1,12 @@
 // 简体中文
 
 export default {
+    'Export map': '导出思维导图',
+    'Fit to window': '适应窗口',
+    'HTML exported': 'HTML 已导出',
+    'HTML export failed': 'HTML 导出失败',
+    'Export requires Obsidian 1.5.7 or later': '导出需要 Obsidian 1.5.7 或更新版本',
+
     'Image exported': '图片已导出',
     'Image export failed': '图片导出失败',
     'Image too large; use a lower resolution or fold branches': '图片过大，请降低导出倍率或折叠部分分支',

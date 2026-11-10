@@ -1,6 +1,12 @@
 // English
 
 export default {
+    'Export map': 'Export map',
+    'Fit to window': 'Fit to window',
+    'HTML exported': 'HTML exported',
+    'HTML export failed': 'HTML export failed',
+    'Export requires Obsidian 1.5.7 or later': 'Export requires Obsidian 1.5.7 or later',
+
     'Image exported': 'Image exported',
     'Image export failed': 'Image export failed',
     'Image too large; use a lower resolution or fold branches': 'Image too large; use a lower resolution or fold branches',

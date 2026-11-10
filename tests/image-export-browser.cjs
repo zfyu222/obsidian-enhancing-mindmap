@@ -22,7 +22,7 @@ visit(source);
     await page.addScriptTag({ content: fs.readFileSync('src/dom-to-image-more.js', 'utf8') });
     await page.addScriptTag({ content: `const domToImageMore=window.domtoimage; const t=x=>x;
       const obsidian={TextFileView:class{},Notice:class{constructor(text){window.notice=text}}};
-      ${['__awaiter','imageSnapshot','imageFilename','MindMapView'].map(name=>declarations.get(name)).join('\n')}
+      ${['__awaiter','exportHtmlEscape','standaloneHtml','imageSnapshot','imageFilename','MindMapView'].map(name=>declarations.get(name)).join('\n')}
       window.exportView=Object.create(MindMapView.prototype);
       const content=document.querySelector('#content'), viewport=document.querySelector('#viewport');
       exportView.mindmap={root:{},contentEL:content,containerEL:viewport,finishEditingForHistory(){},traverseAll(fn){fn({isShow:()=>true,getBox:()=>({x:1000,y:1000,width:100,height:50})})}};
@@ -60,6 +60,48 @@ visit(source);
     assert.deepEqual(result.files[1].magic,[255,216,255]);
     fs.mkdirSync('node_modules/.cache/mindmap-tests',{recursive:true});
     fs.writeFileSync('node_modules/.cache/mindmap-tests/image-export.png',Buffer.from(result.bytes));
+    await page.route('https://assets.test/pixel.png',route=>route.fulfill({contentType:'image/png',headers:{'Access-Control-Allow-Origin':'*'},body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')}));
+    const html = await page.evaluate(async () => {
+      const node=document.querySelector('.mm-node');
+      node.innerHTML='<div class="mm-node-content"><b>中文节点</b><table><tbody><tr><td>表格内容</td></tr></tbody></table><code>code &amp; text</code><a href="https://example.com">link</a><a href="javascript:alert(1)" onclick="alert(1)">bad link</a></div>';
+      node.style.width='180px';node.style.height='100px';node.style.borderRadius='10px';
+      const img=new Image();img.src='https://assets.test/pixel.png';
+      img.style.width='12px';img.style.height='12px';node.append(img);await img.decode();
+      const original=document.querySelector('#content').outerHTML;
+      exportView.mindmap.traverseAll=fn=>fn({isShow:()=>true,getBox:()=>({x:1000,y:1000,width:180,height:100})});
+      exportView.app.vault.create=async(path,text)=>{window.htmlPath=path;window.htmlText=text};
+      await exportView.exportToHtml();
+      if(!window.htmlText) throw new Error(window.notice);
+      if(original!==document.querySelector('#content').outerHTML) throw new Error('Export mutated graph');
+      if(!htmlPath.endsWith('Note-Page- A.html')) throw new Error(htmlPath);
+      if(exportView.exportingImage || document.querySelector('#viewport').children.length!==1) throw new Error('Snapshot leaked');
+      return htmlText;
+    });
+    const htmlFile=require('node:path').resolve('node_modules/.cache/mindmap-tests/html-export.html');
+    fs.writeFileSync(htmlFile,html);
+    const viewer=await browser.newPage({viewport:{width:1100,height:700}});
+    const requests=[];viewer.on('request',r=>{if(/^https?:/.test(r.url()))requests.push(r.url())});
+    await viewer.context().setOffline(true);
+    await viewer.goto(require('node:url').pathToFileURL(htmlFile).href);
+    await viewer.waitForFunction(()=>document.querySelector('#mm-export-zoom').textContent);
+    const checks=await viewer.evaluate(()=>{
+      const node=document.querySelector('.mm-node'),content=document.querySelector('.mm-node-content');
+      const range=document.createRange();range.selectNodeContents(content);getSelection().removeAllRanges();getSelection().addRange(range);
+      return {title:document.title,text:getSelection().toString(),svg:!!document.querySelector('#mm-export-map svg path'),background:getComputedStyle(node).backgroundColor,radius:getComputedStyle(node).borderRadius,imageSrc:document.querySelector('#mm-export-map img').src,image:document.querySelector('#mm-export-map img').complete && document.querySelector('#mm-export-map img').naturalWidth,
+        unsafe:document.querySelectorAll('[onclick],a[href^="javascript:"]').length,table:!!content.querySelector('table'),code:!!content.querySelector('code'),userSelect:getComputedStyle(content).userSelect,link:content.querySelector('a').href};
+    });
+    assert.equal(checks.title,'Note-Page- A');assert.match(checks.text,/中文节点/);assert.match(checks.text,/表格内容/);
+    assert.equal(checks.svg,true);assert.equal(checks.background,'rgb(255, 0, 0)');assert.equal(checks.radius,'10px');assert.equal(checks.image,1);assert.match(checks.imageSrc,/^data:image\/png;base64,/);
+    assert.equal(checks.unsafe,0);assert.equal(checks.table,true);assert.equal(checks.code,true);assert.equal(checks.userSelect,'text');assert.equal(checks.link,'https://example.com/');assert.equal(requests.length,0);
+    await viewer.click('#mm-export-reset');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'100%');
+    await viewer.click('#mm-export-plus');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'120%');
+    await viewer.click('#mm-export-minus');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'100%');
+    await viewer.setViewportSize({width:390,height:700});await viewer.click('#mm-export-fit');
+    assert.ok(parseInt(await viewer.locator('#mm-export-zoom').textContent())<100);
+    await viewer.setViewportSize({width:1100,height:700});await viewer.click('#mm-export-fit');
+    await viewer.evaluate(()=>getSelection().removeAllRanges());
+    await viewer.screenshot({path:'node_modules/.cache/mindmap-tests/html-export.png'});
+    console.log('HTML export: offline file, native selectable Chinese/table/code, styled SVG, embedded image, safe links, zoom/fit and live-graph isolation passed.');
     console.log('Image export bundle browser checks passed: PNG pixels, JPEG signature, SVG bounds, zoom, page naming, failure cleanup and retry.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1});
