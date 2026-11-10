@@ -1,3 +1,4 @@
+import { imageSnapshot, imageFilename } from './image-export';
 import MindMapPanel from './MindMapPanel';
 import { SearchNavigation } from './search/navigation';
 import { extractRelations } from './relations/model';
@@ -162,68 +163,53 @@ export class MindMapView extends TextFileView implements HoverParent {
 
   }
 
-  exportToPng(i_scale: number) {
-    if (!this.mindmap) {
-      return;
-    }
+  private exportingImage = false;
 
-    const { rootBox, oldScrollLeft, oldScrollTop } = this.prepareForExport();
-
-    setTimeout(() => {
-      domtoimage.toPng(this.mindmap.contentEL, { scale: i_scale }).then(async (dataUrl: string) => {
-        var img = new Image();
-        img.src = dataUrl;
-
-        const fileName = this.mindmap.path.replace(/\.md$/, '.png');
-        const arrayBuffer = await this.dataURLtoBlob(dataUrl).arrayBuffer();
-        this.app.vault.adapter.writeBinary(fileName, arrayBuffer)
-          .then(() => {
-            new Notice(`Mindmap exported as PNG: ${fileName}`);
-            this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-          })
-          .catch(err => {
-            console.error('Failed to save PNG file:', err);
-            new Notice(`Failed to export mindmap as PNG: ${err}`);
-            this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-          });
-
-      }).catch(err => {
-        this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-        new Notice(`Failed to export mindmap as PNG: ${err}`);
-      });
-    }, 200);
+  showImageExportMenu(event: MouseEvent) {
+    const menu = new Menu(this.app);
+    (['png', 'jpeg'] as const).forEach(format => {
+      [1, 2, 4].forEach(scale => menu.addItem(item => item
+        .setTitle(`${t(format === 'png' ? 'Export to PNG' : 'Export to JPEG')} (${scale}×)`)
+        .onClick(() => { void this.exportImage(format, scale); })));
+    });
+    menu.showAtMouseEvent(event);
   }
 
-  exportToJpeg(i_scale: number) {
-    if (!this.mindmap) {
-      return;
+  exportToPng(scale: number) { return this.exportImage('png', scale); }
+  exportToJpeg(scale: number) { return this.exportImage('jpeg', scale); }
+
+  async exportImage(format: 'png' | 'jpeg', scale: number) {
+    const map = this.mindmap;
+    if (!map?.root || this.exportingImage) return;
+    this.exportingImage = true;
+    let snapshot: ReturnType<typeof imageSnapshot> | undefined;
+    try {
+      map.finishEditingForHistory();
+      const sourcePath = this.file?.path || map.path;
+      const pageName = this.pages.length > 1 ? this.pageDocument.active().meta.name : '';
+      const filename = imageFilename(sourcePath, pageName, format);
+      snapshot = imageSnapshot(map);
+      // Bound canvas memory; a failed export must leave the original graph usable.
+      if (snapshot.width * scale > 32767 || snapshot.height * scale > 32767 ||
+          snapshot.width * snapshot.height * scale * scale > 64000000) {
+        throw new Error(t('Image too large; use a lower resolution or fold branches'));
+      }
+      const options = { scale, quality: 1, bgcolor: getComputedStyle(map.contentEL).backgroundColor };
+      const dataUrl = await (format === 'png' ? domtoimage.toPng(snapshot.element, options) : domtoimage.toJpeg(snapshot.element, options));
+      const manager = this.app.fileManager as FileManager & {
+        getAvailablePathForAttachment?: (filename: string, sourcePath: string) => Promise<string>;
+      };
+      if (!manager.getAvailablePathForAttachment) throw new Error(t('Image export requires Obsidian 1.5.7 or later'));
+      const path = await manager.getAvailablePathForAttachment(filename, sourcePath);
+      await this.app.vault.createBinary(path, await this.dataURLtoBlob(dataUrl).arrayBuffer());
+      new Notice(`${t('Image exported')}: ${path}`);
+    } catch (error) {
+      console.error('Mind map image export failed', error);
+      new Notice(`${t('Image export failed')}: ${error instanceof Error ? error.message : error}`);
+    } finally {
+      snapshot?.remove();
+      this.exportingImage = false;
     }
-
-    const { rootBox, oldScrollLeft, oldScrollTop } = this.prepareForExport();
-
-    setTimeout(() => {
-      domtoimage.toJpeg(this.mindmap.contentEL, { quality: 1.0, scale: i_scale }).then(async (dataUrl: string) => {
-        var img = new Image();
-        img.src = dataUrl;
-
-        const fileName = this.mindmap.path.replace(/\.md$/, '.jpeg');
-        const arrayBuffer = await this.dataURLtoBlob(dataUrl).arrayBuffer();
-        this.app.vault.adapter.writeBinary(fileName, arrayBuffer)
-          .then(() => {
-            new Notice(`Mindmap exported as JPEG: ${fileName}`);
-            this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-          })
-          .catch(err => {
-            console.error('Failed to save JPEG file:', err);
-            new Notice(`Failed to export mindmap as JPEG: ${err}`);
-            this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-          });
-
-      }).catch(err => {
-        this.restoreMindmap(rootBox, oldScrollLeft, oldScrollTop);
-        new Notice(`Failed to export mindmap as JPEG: ${err}`);
-      });
-    }, 200);
   }
 
   prepareForExport() {

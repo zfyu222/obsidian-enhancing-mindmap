@@ -65,10 +65,11 @@ export default class MindMapToolbar {
       redo: '<path d="m15 4 5 5-5 5m5-5h-9a7 7 0 0 0-7 7v4"/>',
       zoomOut: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6"/>',
       zoomIn: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M7 10h6m-3-3v6"/>',
+      exportImage: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
       panel: '<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M15 4v16"/>',
       center: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><circle cx="12" cy="12" r="3"/>'
     };
-    const button = (id: string, label: string, title: string, action: () => void) => {
+    const button = (id: string, label: string, title: string, action: (event: MouseEvent) => void) => {
       const el = document.createElement('button');
       el.type = 'button';
       if (icons[id]) {
@@ -80,11 +81,11 @@ export default class MindMapToolbar {
       el.title = title;
       el.setAttribute('aria-label', title);
       el.dataset.action = id;
-      el.addEventListener('click', () => {
+      el.addEventListener('click', event => {
         if (!map.root || map.isComposing) return;
-        action();
+        action(event);
         this.update();
-        if (id !== 'viewBack' && id !== 'viewForward' && !map.editNode?.data.isEdit) map.focusAfterHistory();
+        if (id !== 'viewBack' && id !== 'viewForward' && id !== 'exportImage' && !map.editNode?.data.isEdit) map.focusAfterHistory();
       });
       this.buttons[id] = el;
       this.element.appendChild(el);
@@ -119,6 +120,7 @@ export default class MindMapToolbar {
     button('reset', '100%', t('Reset zoom'), () => map.scale(100));
     button('zoomIn', '+', t('Zoom in'), () => map.scale(map.mindScale + 10));
     button('center', t('Center map'), t('Center map'), () => map.center());
+    button('exportImage', t('Export to image'), t('Export to image'), event => map.view?.showImageExportMenu(event));
     button('panel', t('Mind map panel'), t('Toggle mind map panel'), () => map.view?.panel?.toggle());
     map.viewHistory = new ViewHistory(map);
     map.on('toolbarChange', this.update);

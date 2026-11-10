@@ -1,6 +1,11 @@
 // English
 
 export default {
+    'Image exported': 'Image exported',
+    'Image export failed': 'Image export failed',
+    'Image too large; use a lower resolution or fold branches': 'Image too large; use a lower resolution or fold branches',
+    'Image export requires Obsidian 1.5.7 or later': 'Image export requires Obsidian 1.5.7 or later',
+
     'Page': 'Page',
     'Mind map pages': 'Mind map pages',
     'New page': 'New page',

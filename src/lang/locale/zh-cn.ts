@@ -1,6 +1,17 @@
 // 简体中文
 
 export default {
+    'Image exported': '图片已导出',
+    'Image export failed': '图片导出失败',
+    'Image too large; use a lower resolution or fold branches': '图片过大，请降低导出倍率或折叠部分分支',
+    'Image export requires Obsidian 1.5.7 or later': '图片导出需要 Obsidian 1.5.7 或更新版本',
+    'Export to PNG': '导出为 PNG',
+    'Export to JPEG': '导出为 JPEG',
+    'Export to PNG (LQ)': '导出为 PNG（1倍）',
+    'Export to JPEG (LQ)': '导出为 JPEG（1倍）',
+    'Export to PNG (HQ)': '导出为 PNG（4倍）',
+    'Export to JPEG (HQ)': '导出为 JPEG（4倍）',
+
   'Page': '页面',
   'Mind map pages': '思维导图页面',
   'New page': '新建页面',
