@@ -193,6 +193,9 @@ export default {
   "Toggle markdown/mindmap":"切换为 markdown 或 mindmap 模式",
   "Copy node":"复制",
   "Paste node":"粘贴",
-  "Export to html":"导出为 html"
+  "Export to html":"导出为 html",
 
+    'Node width': '节点宽度（px）',
+    'Automatic width': '恢复自动宽度',
+    'Wrap code lines': '代码自动换行',
 };

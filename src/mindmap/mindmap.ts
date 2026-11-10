@@ -389,6 +389,7 @@ export default class MindMap {
     }
 
     removeEvent() {
+        this.endNodeResize();
         this.endEditorDrag();
         this.appEl.removeEventListener('click', this.appClickFn);
         this.appEl.removeEventListener('contextmenu', this.appContextMenu, true);
@@ -460,6 +461,11 @@ export default class MindMap {
         this.isFocused = false;
     }
     appKeydown(e: KeyboardEvent) {
+        if (this._nodeResize) {
+            if (e.key === 'Escape') { e.preventDefault(); this.endNodeResize(); }
+            else e.preventDefault();
+            return;
+        }
         if (!this.view || this.view.app.workspace.getActiveViewOfType(MindMapView) !== this.view) return;
         const target = e.target as HTMLElement;
         const key = e.key.toLowerCase();
@@ -1669,6 +1675,7 @@ export default class MindMap {
     }
 
     appDragstart(evt: DragEvent) {
+        if (this._nodeResize || (evt.target as HTMLElement)?.closest?.('.mm-node-resize')) { evt.preventDefault(); return; }
         if (this.isNodeEditorTarget(evt.target)) return;
         const element = (evt.target as HTMLElement)?.closest('.mm-node');
         if (!element) return;
@@ -1939,7 +1946,30 @@ export default class MindMap {
         drag.frame = doc.defaultView.requestAnimationFrame(drag.apply);
     }
 
+    private _nodeResize?: {node: INode; x: number; width: number; value: number; scale: number; direction: number; left: number};
+    private endNodeResize(commit = false) {
+        const drag = this._nodeResize;
+        if (!drag) return;
+        this._nodeResize = undefined;
+        drag.node.containEl.style.left = drag.left + 'px';
+        applyNodeStyle(drag.node, this.setting.nodeStylePresets || [], this.setting.defaultNodeStyle);
+        this._suppressClickUntil = Date.now() + 200;
+        if (commit && drag.value !== drag.width) {
+            const original = this.grafts?.original(drag.node) || drag.node;
+            this.exec.history.execute(new ChangeNodeStyle(this, [original], {width: drag.value}));
+        }
+        this.focusAfterHistory();
+    }
     appMouseMove(evt: MouseEvent) {
+        if (this._nodeResize) {
+            const drag = this._nodeResize;
+            drag.value = Math.max(80, Math.min(4000, Math.round(drag.width + drag.direction * (evt.clientX - drag.x) / drag.scale)));
+            drag.node.contentEl.style.width = drag.value + 'px';
+            drag.node.contentEl.style.maxWidth = drag.value + 'px';
+            if (drag.direction === -1) drag.node.containEl.style.left = (drag.left + drag.width - drag.value) + 'px';
+            drag.node.boundingRect = null; drag.node.refreshBox(); drag.node.clearCacheData();
+            evt.preventDefault(); return;
+        }
         if (this._editorMouseDown) { this.extendEditorDrag(evt); return; }
         if (this._panning) {
             if (Math.abs(evt.clientX - this.startX) + Math.abs(evt.clientY - this.startY) >= 4) this._panMoved = true;
@@ -1979,6 +2009,19 @@ export default class MindMap {
     }
 
     appMouseDown(evt: MouseEvent) {
+        const handle = (evt.target as HTMLElement)?.closest?.('.mm-node-resize') as HTMLElement;
+        if (handle && evt.button === 0 && !this.isComposing) {
+            const element = handle.closest('.mm-node');
+            const node = this.getNodeById(element.getAttribute('data-id'));
+            if (!node || node.data.isEdit) return;
+            evt.preventDefault(); evt.stopPropagation();
+            this._editorClickPending = false; this._editorMouseDown = false; this.endEditorDrag();
+            this.finishEditingForHistory(); this.setSelectedNodes([node], node);
+            const width = node.contentEl.offsetWidth;
+            this._nodeResize = {node, x: evt.clientX, width, value: width,
+                scale: (this.mindScale || 100) / 100, direction: handle.dataset.edge === 'left' ? -1 : 1, left: parseFloat(node.containEl.style.left) || 0};
+            return;
+        }
         this._editorClickPending = false;
         this._editorMouseDown = evt.button === 0 && this.isNodeEditorTarget(evt.target);
         this.endEditorDrag();
@@ -2020,6 +2063,7 @@ export default class MindMap {
     }
 
     appMouseUp(evt: MouseEvent | FocusEvent) {
+        if (this._nodeResize && (evt.type === 'blur' || (evt as MouseEvent).button === 0)) { this.endNodeResize(evt.type !== 'blur'); return; }
         if (evt.type === 'blur' || (evt as MouseEvent).button === 0) this.endEditorDrag(evt.type !== 'blur');
         if (evt.type === 'blur') {
             this._editorMouseDown = false;

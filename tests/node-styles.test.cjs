@@ -140,8 +140,8 @@ test('standalone local styles and summary local styles persist without any prese
     a.data.nodeStyle={color:'',fontSize:null,bold:false,underline:true};
     const md=map.getMarkdown(),parsed=View.prototype.mdToData.call({},md);
     assert.equal(parsed.children[0].stylePreset,undefined);assert.equal(parsed.children[0].nodeStyle.underline,true);
-    const entries=[{id:'s',memberIds:['a'],root:{id:'s',text:'Summary',nodeStyle:{color:'#123456'},expanded:true,children:[]}}];
-    const result=markdown.extractSummaries(markdown.summaryMarkdown(entries));assert.equal(result.entries[0].root.nodeStyle.color,'#123456');
+    const entries=[{id:'s',memberIds:['a'],root:{id:'s',text:'Summary',nodeStyle:{color:'#123456',width:1300,codeWrap:false},expanded:true,children:[]}}];
+    const result=markdown.extractSummaries(markdown.summaryMarkdown(entries));assert.equal(result.entries[0].root.nodeStyle.color,'#123456');assert.equal(result.entries[0].root.nodeStyle.width,1300);assert.equal(result.entries[0].root.nodeStyle.codeWrap,false);
     const copied=clipboard.parseSubtree(clipboard.serializeForest([a]),()=>`new-${++serial}`);assert.equal(copied[0].nodeStyle.underline,true);
 });
 test('invalid local style attributes cannot inject CSS through metadata',()=>{
@@ -265,4 +265,30 @@ test('default text style persists, inherits through partial presets, and honors 
     assert.equal(map.root.containEl.style.getPropertyValue('--mm-preset-weight'),'700');
     const invalid={loadData:async()=>({defaultNodeStyle:{color:'url(x)',fontSize:999,bold:'true'}})};
     await Plugin.prototype.loadSettings.call(invalid);assert.equal(Object.keys(invalid.settings.defaultNodeStyle).length,0);
+});
+
+
+test('node widths and code wrap round-trip Markdown, clipboard and a single history operation without changing code',()=>{
+    const map=mapFixture(), code=node('```ts\nconst longLine = fn(a, b, c);\n```',map.root);
+    map.selectedNodes=[code];const text=code.data.text;
+    map.applyLocalNodeStyle({width:1400,codeWrap:false});
+    assert.equal(map.exec.history.undos.length,1);
+    assert.equal(code.data.nodeStyle.width,1400);
+    const md=map.getMarkdown(), data=View.prototype.mdToData.call({},md);
+    assert.equal(data.children[0].nodeStyle.width,1400);assert.equal(data.children[0].nodeStyle.codeWrap,false);
+    assert.equal(data.children[0].text,text);
+    const pasted=clipboard.parseSubtree(clipboard.serializeForest([code]),()=>`fresh-${++serial}`);
+    assert.equal(pasted[0].nodeStyle.width,1400);assert.equal(pasted[0].nodeStyle.codeWrap,false);
+    map.exec.history.undo();assert.equal(code.data.nodeStyle,undefined);
+    map.exec.history.redo();assert.equal(code.data.nodeStyle.width,1400);
+    map.applyLocalNodeStyle({width:null});assert.equal(code.data.nodeStyle.width,null);assert.equal(code.data.nodeStyle.codeWrap,false);
+    map.exec.history.undo();assert.equal(code.data.nodeStyle.width,1400);assert.equal(code.data.text,text);
+});
+test('width metadata validates boundaries and retains unknown malformed metadata verbatim',()=>{
+    for(const width of [80,800,4000,null]) assert.equal(styles.normalizeNodeStyle({width}).width,width);
+    for(const width of [-1,0,79,4001,NaN,Infinity,100.5,'800']) assert.equal(styles.normalizeNodeStyle({width}),undefined);
+    for(const value of [{width:5000},{width:800,future:1},{codeWrap:'false'}]) {
+        const text='Code <!-- mm:style '+JSON.stringify({overrides:value})+' -->';
+        assert.equal(styles.readStyleMarker(text).text,text);
+    }
 });

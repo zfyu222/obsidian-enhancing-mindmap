@@ -600,6 +600,20 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
             testMap.setSelectedNodes([testMap.root,testMap.summaries.items[0].root]);
             window.beforeStyleUndos=testMap.exec.history.undos.length;
         });
+        // Width and code-wrap inspector controls apply to ordinary and summary nodes together.
+        // Harness translations return keys unchanged.
+        const widthControl=page.locator('.mm-panel-width input[type=number]');
+        await widthControl.fill('1200'); await widthControl.press('Tab');
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.width),1200);
+        assert.equal(await page.evaluate(()=>testMap.summaries.items[0].root.data.nodeStyle.width),1200);
+        await widthControl.fill('5000'); await widthControl.press('Tab');
+        assert.equal(await widthControl.inputValue(),'1200');
+        await page.getByRole('button',{name:'Automatic width',exact:true}).click();
+        assert.equal(await page.evaluate(()=>testMap.root.data.nodeStyle.width),null);
+        await page.evaluate(()=>testMap.undo());await page.evaluate(()=>testMap.undo());
+        await page.getByRole('checkbox',{name:'Wrap code lines',exact:true}).uncheck();
+        assert.equal(await page.evaluate(()=>testMap.summaries.items[0].root.data.nodeStyle.codeWrap),false);
+        await page.evaluate(()=>testMap.undo());
         const presetSelect=page.locator('.mm-side-panel select[aria-label="Node style preset"]');
         await presetSelect.selectOption('重点');
 
@@ -1073,6 +1087,13 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         await page.evaluate(()=>testMap.applyLocalNodeStyle({backgroundColor:'#193c55',shape:'rounded',bold:true}));
         assert.equal(await page.evaluate(()=>graftTest.a1.data.nodeStyle.bold),true);
         assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.children[0].data.nodeStyle.backgroundColor),'#193c55');
+        await page.evaluate(()=>testMap.applyLocalNodeStyle({width:1100,codeWrap:false}));
+        assert.equal(await page.evaluate(()=>graftTest.a1.data.nodeStyle.width),1100);
+        assert.equal(await page.evaluate(()=>testMap.grafts.roots[1].node.children[0].contentEl.offsetWidth),1100);
+        await page.evaluate(()=>testMap.undo());
+        assert.equal(await page.evaluate(()=>graftTest.a1.data.nodeStyle.width),undefined);
+        assert.equal(await page.evaluate(()=>graftTest.a1.data.nodeStyle.backgroundColor),'#193c55');
+
         await page.evaluate(()=>testMap.setSelectedNodes([testMap.grafts.roots[0].node]));
         console.log('Virtual branches: shared text, history and style passed; adding child.');
         await tool('child').click();await page.waitForFunction(()=>testMap.editNode?.virtualSource?.parent===graftTest.a);
@@ -1311,6 +1332,7 @@ const code = names.map(name => { assert.ok(definitions.has(name), name); return 
         assert.deepEqual(errors,[]);
         console.log('Summary release UI: single/overlapping ranges, editable child tree, Markdown, layout collision checks, parent folding, forest copy/paste remapping, atomic deletion and undo/redo passed.');
         console.log('Headless Chromium: marquee, parent/child filtering, batch clipboard, Delete, native batch drag/drop, right-button panning, text/image paste, native editor caret/word selection, unified draft undo/redo, unselected/body-focus undo and Ctrl+Z passed.');
+        await require('./node-width-browser.cjs')({browser,definitions,screenshotDir});
         await require('./view-history-browser.cjs')({browser,definitions,screenshotDir});
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode=1; });

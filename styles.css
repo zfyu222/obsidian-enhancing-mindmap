@@ -519,3 +519,16 @@
   min-height: 26px;
   padding: 2px 6px;
 }
+
+/* Node widths are logical canvas pixels; handles never appear in exports. */
+.mm-node .mm-node-content { box-sizing: border-box; }
+.mm-node-resize { display: none; position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; touch-action: none; z-index: 2; }
+.mm-node-select:not(.mm-edit-node) > .mm-node-resize { display: block; }
+.mm-node-resize-left { left: -4px; }
+.mm-node-resize-right { right: -4px; }
+.mm-node-resize:hover { background: var(--interactive-accent, #5294e2); opacity: .5; }
+.mm-node-content pre { max-width: 100%; overflow-x: auto; }
+.mm-code-nowrap .mm-node-content pre, .mm-code-nowrap .mm-node-content pre code { white-space: pre !important; overflow-wrap: normal !important; word-break: normal !important; }
+
+.mm-code-wrap .mm-node-content pre, .mm-code-wrap .mm-node-content pre code { white-space: pre-wrap !important; overflow-wrap: anywhere !important; word-break: normal !important; }
+.mm-panel-width input[type=number] { width: 110px; }

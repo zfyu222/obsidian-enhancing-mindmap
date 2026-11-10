@@ -55,7 +55,7 @@ export function imageSnapshot(map: any) {
     images.push(image);
   });
   clone.querySelectorAll('.mm-node-select, .mm-edit-node').forEach(el => el.classList.remove('mm-node-select', 'mm-edit-node'));
-  clone.querySelectorAll('.mm-node-menu, .mm-node-layout-indicate, .mm-selection-rectangle').forEach(el => el.remove());
+  clone.querySelectorAll('.mm-node-resize, .mm-node-menu, .mm-node-layout-indicate, .mm-selection-rectangle').forEach(el => el.remove());
   crop.appendChild(clone);
   host.appendChild(crop);
   map.containerEL.appendChild(host);

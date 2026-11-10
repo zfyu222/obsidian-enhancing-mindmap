@@ -12,6 +12,10 @@ export default class MindMapPanel {
     private status: HTMLElement;
     private heading: HTMLElement;
     private presetSection: HTMLElement;
+    private nodeWidth: HTMLInputElement;
+    private autoWidth: HTMLButtonElement;
+    private codeWrap: HTMLInputElement;
+    private widthControls: HTMLElement;
     private fontSize: HTMLInputElement;
     private sizeTimer?: ReturnType<typeof setTimeout>;
     private sizeDraft?: {nodes: any[]; editor?: any; text?: {node: any; text: string; start: number; end: number}; value: number | null};
@@ -67,6 +71,25 @@ export default class MindMapPanel {
             if (this.pending || this.textSelection || map.isComposing || !map.getSelectedNodes().length) return;
             this.cancelFontSize(); map.applyLocalNodeStyle(patch); this.update();
         });
+        this.widthControls = document.createElement('div'); this.widthControls.className = 'mm-panel-width'; section.appendChild(this.widthControls);
+        const widthLabel = document.createElement('label'); widthLabel.textContent = t('Node width'); this.widthControls.appendChild(widthLabel);
+        this.nodeWidth = document.createElement('input'); this.nodeWidth.type = 'number'; this.nodeWidth.min = '80'; this.nodeWidth.max = '4000'; this.nodeWidth.step = '1';
+        this.nodeWidth.setAttribute('aria-label', t('Node width')); this.nodeWidth.placeholder = t('Automatic width'); widthLabel.appendChild(this.nodeWidth);
+        this.nodeWidth.addEventListener('change', () => {
+            const value = this.nodeWidth.value === '' ? null : Number(this.nodeWidth.value);
+            if (value === null || (Number.isInteger(value) && value >= 80 && value <= 4000)) map.applyLocalNodeStyle({width: value});
+            else {
+                const nodes = map.getSelectedNodes();
+                const widths = nodes.map(node => effectiveNodeStyle(node, map.setting.nodeStylePresets || [], map.setting.defaultNodeStyle).width);
+                this.nodeWidth.value = widths.length && widths.every(w => w === widths[0]) ? widths[0]?.toString() || '' : '';
+            }
+            this.update();
+        });
+        this.autoWidth = document.createElement('button'); this.autoWidth.type = 'button'; this.autoWidth.textContent = t('Automatic width');
+        this.autoWidth.addEventListener('click', () => { map.applyLocalNodeStyle({width: null}); map.focusAfterHistory(); }); this.widthControls.appendChild(this.autoWidth);
+        const wrapLabel = document.createElement('label'); wrapLabel.textContent = t('Wrap code lines');
+        this.codeWrap = document.createElement('input'); this.codeWrap.type = 'checkbox'; this.codeWrap.setAttribute('aria-label', t('Wrap code lines'));
+        this.codeWrap.addEventListener('change', () => map.applyLocalNodeStyle({codeWrap: this.codeWrap.checked})); wrapLabel.prepend(this.codeWrap); this.widthControls.appendChild(wrapLabel);
         this.reset = document.createElement('button'); this.reset.type = 'button'; this.reset.textContent = t('Clear local node style');
         this.reset.addEventListener('click', () => { this.cancelFontSize(); map.applyLocalNodeStyle(); map.focusAfterHistory(); }); section.appendChild(this.reset);
         this.presetSection = document.createElement('section'); this.presetSection.className = 'mm-panel-presets'; this.element.appendChild(this.presetSection);
@@ -253,6 +276,11 @@ export default class MindMapPanel {
         this.color.setDisabled(disabled); this.fontSize.disabled = disabled;
         const styles = nodes.map(node => effectiveNodeStyle(node, presets, this.map.setting.defaultNodeStyle));
         const common = (key: string) => styles.length && styles.every(s => (s as any)[key] === (styles[0] as any)[key]) ? (styles[0] as any)[key] : undefined;
+        this.widthControls.hidden = textMode;
+        this.nodeWidth.disabled = this.autoWidth.disabled = this.codeWrap.disabled = disabled || textMode;
+        if (this.doc.activeElement !== this.nodeWidth) this.nodeWidth.value = common('width')?.toString() || '';
+        this.codeWrap.checked = common('codeWrap') !== false;
+        this.codeWrap.indeterminate = styles.some(s => s.codeWrap === false) && styles.some(s => s.codeWrap !== false);
         this.box.element.hidden = textMode;
         this.box.setValue({shape: common('shape'), borderColor: common('borderColor'), borderWidth: common('borderWidth'), backgroundColor: common('backgroundColor')}, disabled || textMode);
         const sizes = nodes.map((node, index) => {

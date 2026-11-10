@@ -219,4 +219,7 @@ export default {
     "Export to JPEG (HQ)":"Export to JPEG (HQ)",
     "Export to PNG (LQ)":"Export to PNG (LQ)",
     "Export to JPEG (LQ)":"Export to JPEG (LQ)",
+    'Node width': 'Node width (px)',
+    'Automatic width': 'Automatic width',
+    'Wrap code lines': 'Wrap code lines',
 };

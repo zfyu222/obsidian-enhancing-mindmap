@@ -39,7 +39,7 @@ export function renamePreset(presets: NodeStylePreset[], preset: NodeStylePreset
     }
     return true;
 }
-export interface LocalNodeStyle extends Pick<NodeStylePreset, "shape" | "borderColor" | "borderWidth" | "backgroundColor"> { color?: string; fontSize?: number | null; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
+export interface LocalNodeStyle extends Pick<NodeStylePreset, "shape" | "borderColor" | "borderWidth" | "backgroundColor"> { width?: number | null; codeWrap?: boolean; color?: string; fontSize?: number | null; bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean }
 /** Keep box properties optional so older notes retain their appearance. */
 export function normalizeNodeBoxStyle(value: any) {
     const result: Pick<NodeStylePreset, 'shape' | 'borderColor' | 'borderWidth' | 'backgroundColor'> = {};
@@ -54,6 +54,8 @@ export function normalizeNodeBoxStyle(value: any) {
 export function normalizeNodeStyle(value: any): LocalNodeStyle | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
     const result: any = {...normalizeNodeBoxStyle(value)};
+    if (value.width === null || (Number.isInteger(value.width) && value.width >= 80 && value.width <= 4000)) result.width = value.width;
+    if (typeof value.codeWrap === 'boolean') result.codeWrap = value.codeWrap;
     if (value.color === '' || /^#[0-9a-f]{6}$/i.test(value.color || '')) result.color = value.color;
     if (value.fontSize === null || (Number.isFinite(value.fontSize) && value.fontSize >= 8 && value.fontSize <= 72)) result.fontSize = value.fontSize;
     for (const key of ['bold','italic','underline','strike']) if (typeof value[key] === 'boolean') result[key] = value[key];
@@ -112,6 +114,24 @@ export function applyNodeStyle(node: any, presets: NodeStylePreset[], defaults?:
         style.setProperty('--mm-preset-weight', preset.bold ? '700' : 'normal');
         style.setProperty('--mm-preset-italic', preset.italic ? 'italic' : 'normal');
         style.setProperty('--mm-preset-decoration', [preset.underline ? 'underline' : '', preset.strike ? 'line-through' : ''].filter(Boolean).join(' ') || 'none');
+    }
+    if (node.contentEl?.style) {
+        const width = preset?.width;
+        node.contentEl.style.width = typeof width === 'number' ? width + 'px' : '';
+        node.contentEl.style.maxWidth = typeof width === 'number' ? width + 'px' : '';
+        node.containEl.classList.toggle('mm-code-nowrap', preset?.codeWrap === false);
+        node.containEl.classList.toggle('mm-code-wrap', preset?.codeWrap === true);
+        if (!node.containEl.querySelector('.mm-node-resize')) {
+            for (const edge of ['left', 'right']) {
+                const handle = node.contentEl.ownerDocument.createElement('span');
+                handle.className = 'mm-node-resize mm-node-resize-' + edge;
+                handle.dataset.edge = edge;
+                handle.setAttribute('aria-hidden', 'true');
+                handle.addEventListener('click', (e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); });
+                handle.addEventListener('dblclick', (e: MouseEvent) => { e.preventDefault(); e.stopPropagation(); });
+                node.containEl.appendChild(handle);
+            }
+        }
     }
     node.boundingRect = null;
     node.refreshBox();
