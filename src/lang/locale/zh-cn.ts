@@ -198,4 +198,9 @@ export default {
     'Node width': '节点宽度（px）',
     'Automatic width': '恢复自动宽度',
     'Wrap code lines': '代码自动换行',
+    'Export map': '导出思维导图',
+    'HTML exported': 'HTML 已导出',
+    'HTML export failed': 'HTML 导出失败',
+    'Fit to window': '适应窗口',
+    'Export requires Obsidian 1.5.7 or later': '导出需要 Obsidian 1.5.7 或更新版本',
 };

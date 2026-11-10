@@ -120,7 +120,7 @@ export default class MindMapToolbar {
     button('reset', '100%', t('Reset zoom'), () => map.scale(100));
     button('zoomIn', '+', t('Zoom in'), () => map.scale(map.mindScale + 10));
     button('center', t('Center map'), t('Center map'), () => map.center());
-    button('exportImage', t('Export to image'), t('Export to image'), event => map.view?.showImageExportMenu(event));
+    button('exportImage', t('Export map'), t('Export map'), event => map.view?.showImageExportMenu(event));
     button('panel', t('Mind map panel'), t('Toggle mind map panel'), () => map.view?.panel?.toggle());
     map.viewHistory = new ViewHistory(map);
     map.on('toolbarChange', this.update);

@@ -222,4 +222,9 @@ export default {
     'Node width': 'Node width (px)',
     'Automatic width': 'Automatic width',
     'Wrap code lines': 'Wrap code lines',
+    'Export map': 'Export map',
+    'HTML exported': 'HTML exported',
+    'HTML export failed': 'HTML export failed',
+    'Fit to window': 'Fit to window',
+    'Export requires Obsidian 1.5.7 or later': 'Export requires Obsidian 1.5.7 or later',
 };

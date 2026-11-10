@@ -22,7 +22,7 @@ visit(source);
     await page.addScriptTag({ content: fs.readFileSync('src/dom-to-image-more.js', 'utf8') });
     await page.addScriptTag({ content: `const domToImageMore=window.domtoimage; const t=x=>x;
       const obsidian={TextFileView:class{},Notice:class{constructor(text){window.notice=text}}};
-      ${['__awaiter','exportBackground','imageSnapshot','imageFilename','MindMapView'].map(name=>declarations.get(name)).join('\n')}
+      ${['__awaiter','exportHtmlEscape','standaloneHtml','exportBackground','imageSnapshot','imageFilename','MindMapView'].map(name=>declarations.get(name)).join('\n')}
       window.exportView=Object.create(MindMapView.prototype);
       const content=document.querySelector('#content'), viewport=document.querySelector('#viewport');
       exportView.mindmap={root:{},contentEL:content,containerEL:viewport,finishEditingForHistory(){},traverseAll(fn){fn({isShow:()=>true,getBox:()=>({x:1000,y:1000,width:100,height:50})})}};
@@ -123,6 +123,84 @@ visit(source);
     });
     assert.equal(retry,1,'A failed fetch must not poison the retry cache');
     console.log('Image fidelity: transparent layers over white/dark/custom/alpha backgrounds, opaque PNG/JPEG pixels, black SVG lines and lazy attachment image pixels passed.');
+    await page.route('https://assets.test/pixel.png',route=>route.fulfill({contentType:'image/png',headers:{'Access-Control-Allow-Origin':'*'},body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')}));
+    const html = await page.evaluate(async () => {
+      const node=document.querySelector('.mm-node');
+      node.innerHTML='<div class="mm-node-content"><b>中文节点</b><table><tbody><tr><td>表格内容</td></tr></tbody></table><code>code &amp; text</code><a href="https://example.com">link</a><a href="javascript:alert(1)" onclick="alert(1)">bad link</a></div>';
+      node.style.width='1100px';node.style.height='210px';node.style.borderRadius='10px';
+      const pre=document.createElement('pre');pre.style.cssText='white-space:pre;overflow-x:auto;width:100%;margin:0';
+      const code=document.createElement('code');code.style.whiteSpace='pre';code.textContent='const veryLongLine = '+ 'parameter, '.repeat(160)+';';pre.append(code);node.querySelector('.mm-node-content').append(pre);
+      node.querySelector('.mm-node-content').style.cssText='box-sizing:border-box;width:1100px;max-width:1100px;user-select:none';
+      const handle=document.createElement('span');handle.className='mm-node-resize';node.append(handle);
+      const img=new Image();img.src='https://assets.test/pixel.png';
+      img.style.width='12px';img.style.height='12px';node.append(img);await img.decode();
+      const original=document.querySelector('#content').outerHTML;
+      exportView.mindmap.traverseAll=fn=>fn({isShow:()=>true,getBox:()=>({x:1000,y:1000,width:1100,height:210})});
+      exportView.app.vault.create=async(path,text)=>{window.htmlPath=path;window.htmlText=text};
+      await exportView.exportToHtml();
+      if(!window.htmlText) throw new Error(window.notice);
+      if(original!==document.querySelector('#content').outerHTML) throw new Error('Export mutated graph');
+      if(!htmlPath.endsWith('Note-Page- A.html')) throw new Error(htmlPath);
+      if(exportView.exportingImage || document.querySelector('#viewport').children.length!==1) throw new Error('Snapshot leaked');
+      return htmlText;
+    });
+    // Missing HTML image resources abort the save, clean up, and allow a later retry.
+    await page.route('https://assets.test/missing-html.png',route=>route.fulfill({status:404,body:'missing'}));
+    await page.evaluate(async()=>{
+      const bad=new Image();bad.src='https://assets.test/missing-html.png';document.querySelector('.mm-node').append(bad);
+      window.htmlText='';await exportView.exportToHtml();
+      if(window.htmlText || !window.notice.includes('HTML export failed'))throw new Error('Incomplete HTML was saved');
+      if(exportView.exportingImage || document.querySelector('#viewport').children.length!==1)throw new Error('Failed HTML leaked a snapshot');
+      bad.remove();await exportView.exportToHtml();if(!window.htmlText)throw new Error('HTML retry failed');
+    });
+    const htmlFile=require('node:path').resolve('node_modules/.cache/mindmap-tests/html-export.html');
+    fs.writeFileSync(htmlFile,html);
+    const viewer=await browser.newPage({viewport:{width:1100,height:700}});
+    const requests=[];viewer.on('request',r=>{if(/^https?:/.test(r.url()))requests.push(r.url())});
+    await viewer.context().setOffline(true);
+    await viewer.goto(require('node:url').pathToFileURL(htmlFile).href);
+    await viewer.waitForFunction(()=>document.querySelector('#mm-export-zoom').textContent);
+    const checks=await viewer.evaluate(()=>{
+      const node=document.querySelector('.mm-node'),content=document.querySelector('.mm-node-content');
+      const range=document.createRange();range.selectNodeContents(content);getSelection().removeAllRanges();getSelection().addRange(range);
+      return {title:document.title,text:getSelection().toString(),svg:!!document.querySelector('#mm-export-map svg path'),background:getComputedStyle(node).backgroundColor,radius:getComputedStyle(node).borderRadius,imageSrc:document.querySelector('#mm-export-map img').src,image:document.querySelector('#mm-export-map img').complete && document.querySelector('#mm-export-map img').naturalWidth,
+        unsafe:document.querySelectorAll('[onclick],a[href^="javascript:"]').length,table:!!content.querySelector('table'),code:!!content.querySelector('code'),userSelect:getComputedStyle(content).userSelect,link:content.querySelector('a').href, width:content.offsetWidth, preWhiteSpace:getComputedStyle(content.querySelector('pre')).whiteSpace, scroll:content.querySelector('pre').scrollWidth>content.querySelector('pre').clientWidth, handles:document.querySelectorAll('.mm-node-resize').length, csp:document.querySelector('meta[http-equiv="Content-Security-Policy"]').content};
+    });
+    assert.equal(checks.title,'Note-Page- A');assert.match(checks.text,/中文节点/);assert.match(checks.text,/表格内容/);
+    assert.equal(checks.svg,true);assert.equal(checks.background,'rgb(255, 0, 0)');assert.equal(checks.radius,'10px');assert.equal(checks.image,1);assert.match(checks.imageSrc,/^data:image\/png;base64,/);
+    assert.equal(checks.unsafe,0);assert.equal(checks.table,true);assert.equal(checks.code,true);assert.equal(checks.userSelect,'text');assert.equal(checks.link,'https://example.com/');assert.equal(requests.length,0);assert.equal(checks.width,1100);assert.equal(checks.preWhiteSpace,'pre');assert.equal(checks.scroll,true);assert.equal(checks.handles,0);assert.match(checks.csp,/default-src 'none'/);
+    // A real pointer gesture must work: the capture host deliberately disables pointer events.
+    const word=await viewer.locator('#mm-export-map b').boundingBox();
+    await viewer.mouse.move(word.x+1,word.y+word.height/2);await viewer.mouse.down();
+    await viewer.mouse.move(word.x+word.width-1,word.y+word.height/2,{steps:8});await viewer.mouse.up();
+    assert.match(await viewer.evaluate(()=>getSelection().toString()),/中文节点/);
+    const codeBounds=await viewer.locator('#mm-export-map pre').boundingBox();
+    await viewer.mouse.move(codeBounds.x+40,codeBounds.y+codeBounds.height/2);await viewer.mouse.wheel(300,0);
+    await viewer.waitForFunction(()=>document.querySelector('#mm-export-map pre').scrollLeft>0);
+    await viewer.click('#mm-export-reset');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'100%');
+    await viewer.click('#mm-export-plus');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'120%');
+    await viewer.click('#mm-export-minus');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'100%');
+    await viewer.setViewportSize({width:390,height:700});await viewer.click('#mm-export-fit');
+    assert.ok(parseInt(await viewer.locator('#mm-export-zoom').textContent())<100);
+    await viewer.setViewportSize({width:1100,height:700});await viewer.click('#mm-export-fit');
+    await viewer.evaluate(()=>getSelection().removeAllRanges());
+    await viewer.screenshot({path:'node_modules/.cache/mindmap-tests/html-export.png'});
+    // Note markup is data. Only the viewer's nonce-authorized script survives.
+    const escapedHtml=await page.evaluate(()=>{
+      const fragment=document.createElement('div');fragment.style.cssText='width:400px;height:200px';
+      fragment.innerHTML='<script>window.noteExecuted=1</script><iframe srcdoc="bad"></iframe><a href="javascript:alert(1)" onclick="window.noteExecuted=1">unsafe</a><svg><a href="https://example.com"><animate attributeName="href" values="javascript:alert(1)"/></a></svg>';
+      const text=document.createElement('p');text.textContent='Literal </script> <img onerror=alert(1)> & Chinese 中文';fragment.append(text);
+      return standaloneHtml(fragment,'<img onerror=alert(1)> & title',400,200,{fit:'<fit>',reset:'100%',zoomIn:'Zoom in',zoomOut:'Zoom out'});
+    });
+    const safeFile=require('node:path').resolve('node_modules/.cache/mindmap-tests/html-export-escaped.html');fs.writeFileSync(safeFile,escapedHtml);
+    await viewer.goto(require('node:url').pathToFileURL(safeFile).href);
+    assert.equal(await viewer.title(),'<img onerror=alert(1)> & title');
+    assert.match(await viewer.locator('#mm-export-map').innerText(),/Literal <\/script> <img onerror=alert\(1\)>/);
+    assert.equal(await viewer.locator('script').count(),1);
+    assert.equal(await viewer.locator('[onclick],iframe,animate,a[href^="javascript:"]').count(),0);
+    assert.equal(await viewer.evaluate(()=>window.noteExecuted),undefined);
+    await viewer.click('#mm-export-plus');assert.equal(await viewer.locator('#mm-export-zoom').textContent(),'120%');
+    console.log('HTML export: offline file, native selectable Chinese/table/code, styled SVG, embedded image, safe links, zoom/fit and live-graph isolation passed.');
     console.log('Image export bundle browser checks passed: PNG pixels, JPEG signature, SVG bounds, zoom, page naming, failure cleanup and retry.');
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1});
