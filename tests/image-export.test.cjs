@@ -8,7 +8,7 @@ test('image filenames identify pages and remove unsafe filename characters',()=>
 });
 function fixture() {
  const notices=[],writes=[];let removed=0,rendered=0;
- const snapshot={width:100,height:100,element:{},remove(){removed++}};
+ const snapshot={width:100,height:100,element:{},background:"rgb(255, 255, 255)",ready:async()=>{},remove(){removed++}};
  const View=load('src/MindMapView.ts',{
   obsidian:{TextFileView:class{},Notice:class{constructor(text){notices.push(text)}}},
   './markmapLib/markmap-lib':{Transformer:class{}},
@@ -56,4 +56,10 @@ test('HTML write failures clean up and permit retry',async()=>{
  f.view.app.vault.create=async()=>{throw new Error('disk full')};
  await f.view.exportToHtml();assert.equal(f.removed,1);assert.match(f.notices[0],/HTML export failed.*disk full/);
  f.view.app.vault.create=save;await f.view.exportToHtml();assert.equal(f.writes.length,1);
+});
+
+test('image decode failure saves no incomplete image and cleans up for retry',async()=>{
+ const f=fixture();f.snapshot.ready=async()=>{throw new Error('image decode failed')};
+ await f.view.exportToPng(1);assert.equal(f.removed,1);assert.equal(f.writes.length,0);assert.equal(f.view.exportingImage,false);assert.match(f.notices[0],/image decode failed/);
+ f.snapshot.ready=async()=>{};await f.view.exportToPng(1);assert.equal(f.writes.length,1);
 });
