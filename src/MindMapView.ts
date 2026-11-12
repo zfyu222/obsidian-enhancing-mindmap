@@ -218,6 +218,11 @@ export class MindMapView extends TextFileView implements HoverParent {
     if (this.mindmap?.root) this.mindmap.finishEditingForHistory();
   }
 
+  async saveBeforeMarkdownView() {
+    this.commitDraft();
+    await this.save();
+  }
+
   private captureActivePage() {
     const map = this.mindmap, page = this.activePage();
     if (!map?.root || !page || !this.pageDocument) return;
@@ -409,7 +414,7 @@ export class MindMapView extends TextFileView implements HoverParent {
 
   /** Splits the file into pages; metadata is scoped per page except file-wide grafts. */
   private loadPages() {
-    const body = this.getMdText(this.data);
+    const body = this.getMdText(this.data).replace(/\r\n/g, '\n');
     this.graftDocument = extractGrafts(body);
     this.pageDocument = new PageDocument(this.graftDocument.main, this.activePageId, index => `${t('Page')} ${index + 1}`);
     if (this.pageDocument.error && !this.pageErrorShown) {
@@ -652,7 +657,7 @@ export class MindMapView extends TextFileView implements HoverParent {
   }
 
   mdToData(str: string, includeSource = false) {
-    const prepared = prepareMainMarkdown(str);
+    const prepared = prepareMainMarkdown(str.replace(/\r\n/g, '\n'));
     function transformData(mapData: any) {
       var flag = true;
       if (mapData.t == 'blockquote') {

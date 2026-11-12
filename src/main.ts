@@ -7,6 +7,7 @@ import {
   TFile,
   TFolder,
   ViewState,
+  Notice,
   MarkdownView
 } from 'obsidian';
 // import DEFAULT_SETTINGS from './setting'
@@ -1255,6 +1256,19 @@ export default class MindMapPlugin extends Plugin {
   }
 
   async setMarkdownView(leaf: WorkspaceLeaf) {
+    const view = leaf.view;
+    const file = view instanceof MindMapView ? view.file : null;
+    if (view instanceof MindMapView && file) {
+      try {
+        await view.saveBeforeMarkdownView();
+      } catch (err) {
+        console.error(err);
+        this.mindmapFileModes[(leaf as any).id || file.path] = mindmapViewType;
+        new Notice(t('Save fail'));
+        return;
+      }
+      if (leaf.view !== view || view.file !== file) return;
+    }
     await leaf.setViewState(
       {
         type: "markdown",

@@ -59,6 +59,18 @@ test('adding and renaming a page writes markers for every page and keeps the ori
  assert.equal(reloaded.rename('missing','Name'),false);
 });
 
+test('pages added in mind map survive a Windows Markdown save and reopen independently',()=>{
+ const doc=new documentModule.PageDocument(single);
+ const added=doc.add('Page 2','# Page 2\n- Only on page two');
+ const windows=doc.compose('').replace(/\n/g,'\r\n');
+ const reopened=new documentModule.PageDocument(windows,added.meta.id);
+ assert.equal(reopened.error,'');
+ assert.equal(reopened.pages.length,2);
+ assert.equal(reopened.pages[0].tree,single);
+ assert.equal(reopened.active().tree,'# Page 2\n- Only on page two');
+ assert.equal(reopened.active().meta.id,added.meta.id);
+});
+
 test('deleting pages falls back to a neighbour and refuses to remove the last page',()=>{
  const doc=new documentModule.PageDocument([marker('pg-a','A'),'# A',marker('pg-b','B'),'# B',marker('pg-c','C'),'# C'].join('\n\n'));
  doc.setActive('pg-c');

@@ -60,6 +60,26 @@ test('view receives ephemeral state and the existing leaf routing preserves the 
  wrapped.call(leaf,{type:'markdown',state:{file:'plain.md'}},ephemeral);assert.equal(received[0].type,'markdown');
 });
 
+test('switching to Markdown commits the node draft and waits for the save',async()=>{
+ const Plugin=load('src/main.ts',{obsidian:{Plugin:class{}},'./MindMapView':{MindMapView:View}}).default;
+ const view=Object.create(View.prototype);
+ const events=[];
+ let finishSave;
+ Object.assign(view,{
+  file:{path:'map.md'},
+  mindmap:{root:{},finishEditingForHistory(){events.push('draft');}},
+  save(){events.push('save');return new Promise(resolve=>{finishSave=resolve;});},
+  getState(){return {file:this.file.path};}
+ });
+ const leaf={view,async setViewState(state){events.push(state);}};
+ const switching=Plugin.prototype.setMarkdownView.call({},leaf);
+ assert.deepEqual(events,['draft','save']);
+ finishSave();
+ await switching;
+ assert.equal(events[2].type,'markdown');
+ assert.equal(events[2].state.file,'map.md');
+});
+
 test('rapid file renders discard obsolete initialization and closing a view cancels queued work',async()=>{
  const maps=[],flushed=[];
  class FakeMap{constructor(data){this.data=data;this.summaries={load(){}};this.relations={load(){}};this.grafts={load(){}};maps.push(this);}init(){this.inits=(this.inits||0)+1;this.root={};}refresh(){}clear(){this.cleared=true;}}

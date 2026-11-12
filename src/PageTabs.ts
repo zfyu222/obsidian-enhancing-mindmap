@@ -14,6 +14,11 @@ export default class PageTabs {
     this.element = document.createElement('div');
     this.element.className = 'mm-pages';
     this.element.setAttribute('aria-label', t('Mind map pages'));
+    this.element.addEventListener('contextmenu', event => {
+      if ((event.target as Element)?.closest('button, input')) return;
+      event.preventDefault();
+      this.view.addPage();
+    });
     if (after?.parentNode === host) host.insertBefore(this.element, after.nextSibling);
     else host.appendChild(this.element);
     this.render();
@@ -71,19 +76,13 @@ export default class PageTabs {
     controls.className = 'mm-page-controls';
     this.prev = this.scrollButton('‹', 'Scroll pages left', -1);
     this.next = this.scrollButton('›', 'Scroll pages right', 1);
-    const add = document.createElement('button');
-    add.className = 'mm-page-add';
-    add.setAttribute('aria-label', t('New page'));
-    add.title = t('New page');
-    add.textContent = '+';
-    add.addEventListener('click', () => this.view.addPage());
     const more = document.createElement('button');
     more.className = 'mm-page-more';
     more.setAttribute('aria-label', t('Page menu'));
     more.title = t('Page menu');
     more.textContent = '⋯';
     more.addEventListener('click', event => this.menu(active).showAtMouseEvent(event));
-    controls.append(this.prev, this.next, add, more);
+    controls.append(this.prev, this.next, more);
     this.element.appendChild(controls);
     setTimeout(() => this.updateScroll(), 0);
   }
@@ -115,6 +114,7 @@ export default class PageTabs {
 
   private menu(id: string): Menu {
     const menu = new Menu((this.view as any).app);
+    menu.addItem(item => item.setTitle(t('New page')).setIcon('plus').onClick(() => this.view.addPage()));
     menu.addItem(item => item.setTitle(t('Rename page')).setIcon('pencil').onClick(() => this.startRename(id)));
     menu.addItem(item => item.setTitle(t('Delete page')).setIcon('trash').onClick(() => this.view.deletePage(id)));
     return menu;

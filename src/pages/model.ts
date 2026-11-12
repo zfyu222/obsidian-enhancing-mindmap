@@ -55,7 +55,7 @@ interface Segment { meta: PageMeta; startLine: number; endLine: number }
 
 /** Split the document body (frontmatter already removed) into page segments. */
 export function splitPages(markdown: string): SplitResult {
-  const lines = markdown.split('\n');
+  const lines = markdown.split(/\r?\n/);
   const segments: Segment[] = [];
   const ids = new Set<string>();
   let current: PageMeta | null = null;

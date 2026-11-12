@@ -502,7 +502,6 @@
   line-height: 1;
 }
 .mm-pages button.mm-page-scroll:hover:not(:disabled) { background: var(--background-modifier-hover); color: var(--text-normal); }
-.mm-pages button.mm-page-add,
 .mm-pages button.mm-page-more {
   flex: 0 0 auto;
   min-width: 26px;
@@ -511,7 +510,6 @@
   background: transparent;
   box-shadow: none;
 }
-.mm-pages button.mm-page-add:hover,
 .mm-pages button.mm-page-more:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .mm-pages input.mm-page-name {
   flex: 0 0 auto;
