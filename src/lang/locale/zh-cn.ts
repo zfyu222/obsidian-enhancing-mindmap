@@ -1,6 +1,15 @@
 // 简体中文
 
 export default {
+    'Cancel': '取消',
+    'Save export': '保存导出文件',
+    'Export folder': '保存文件夹',
+    'Vault root': '知识库根目录',
+    'Export filename': '文件名',
+    'Choose an existing vault folder': '请输入已有的知识库文件夹',
+    'Enter a valid filename': '请输入有效的文件名',
+    'Choose a filename that does not already exist': '文件已存在，请更换文件名',
+
     'Image exported': '图片已导出',
     'Image export failed': '图片导出失败',
     'Image too large; use a lower resolution or fold branches': '图片过大，请降低导出倍率或折叠部分分支',

@@ -1,3 +1,4 @@
+import { saveExport } from './save-export';
 import { standaloneHtml } from './html-export';
 import { imageSnapshot, imageFilename } from './image-export';
 import MindMapPanel from './MindMapPanel';
@@ -152,13 +153,11 @@ export class MindMapView extends TextFileView implements HoverParent {
       } else {
         dataUrl = await (format === 'png' ? domtoimage.toPng(snapshot.element, options) : domtoimage.toJpeg(snapshot.element, options));
       }
-      const manager = this.app.fileManager as FileManager & {
-        getAvailablePathForAttachment?: (filename: string, sourcePath: string) => Promise<string>;
-      };
-      if (!manager.getAvailablePathForAttachment) throw new Error(t('Export requires Obsidian 1.5.7 or later'));
-      const path = await manager.getAvailablePathForAttachment(filename, sourcePath);
-      if (format === 'html') await this.app.vault.create(path, html);
-      else await this.app.vault.createBinary(path, await this.dataURLtoBlob(dataUrl).arrayBuffer());
+      snapshot.remove();
+      snapshot = undefined;
+      const data = format === 'html' ? new Blob([html], { type: 'text/html;charset=utf-8' }) : this.dataURLtoBlob(dataUrl);
+      const path = await saveExport(this.app, filename, format, data);
+      if (!path) return;
       new Notice(`${t(format === 'html' ? 'HTML exported' : 'Image exported')}: ${path}`);
     } catch (error) {
       console.error('Mind map export failed', error);

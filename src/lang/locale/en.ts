@@ -1,6 +1,15 @@
 // English
 
 export default {
+    'Cancel': 'Cancel',
+    'Save export': 'Save export',
+    'Export folder': 'Export folder',
+    'Vault root': 'Vault root',
+    'Export filename': 'Export filename',
+    'Choose an existing vault folder': 'Choose an existing vault folder',
+    'Enter a valid filename': 'Enter a valid filename',
+    'Choose a filename that does not already exist': 'Choose a filename that does not already exist',
+
     'Image exported': 'Image exported',
     'Image export failed': 'Image export failed',
     'Image too large; use a lower resolution or fold branches': 'Image too large; use a lower resolution or fold branches',

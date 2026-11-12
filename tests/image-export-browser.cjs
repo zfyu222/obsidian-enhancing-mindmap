@@ -29,7 +29,8 @@ visit(source);
       exportView.file={path:'Raw/Note.md'};
       exportView.pageDocument={pages:[{},{}],active:()=>({meta:{name:'Page: A'}})};
       window.saved=[];
-      exportView.app={fileManager:{getAvailablePathForAttachment:async name=>'Assets/'+saved.length+'-'+name},vault:{createBinary:async(path,bytes)=>{saved.push({path,bytes:Array.from(new Uint8Array(bytes))})}}};
+      async function saveExport(app,name,format,data){const path='Chosen/'+saved.length+'-'+name;if(format==='html')await app.vault.create(path,await data.text());else await app.vault.createBinary(path,await data.arrayBuffer());return path;}
+      exportView.app={vault:{createBinary:async(path,bytes)=>{saved.push({path,bytes:Array.from(new Uint8Array(bytes))})}}};
       window.original=content.outerHTML;
     ` });
     const result = await page.evaluate(async () => {
