@@ -147,6 +147,10 @@ export default {
     "Center map": "Center map",
     // main.ts
     "Open as mindmap board": "Open as mindmap board",
+    "Import XMind file": "Import XMind file",
+    "XMind import failed": "XMind import failed",
+    "XMind imported": "XMind imported",
+    "Unsupported XMind images": "Unsupported XMind images",
     "Create new mindmap": "Create new mindmap",
     "New mindmap board": "New mindmap board",
     "Untitled mindmap": "Untitled mindmap",

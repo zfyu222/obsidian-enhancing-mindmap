@@ -1,3 +1,4 @@
+import { convertXmind, MAX_XMIND_BYTES, XmindImport } from './mindmap/import/xmind';
 import { normalizePresets, normalizeNodeStyle } from './nodeStyles';
 import { normalizeViewHistoryOptions } from './mindmap/view-history-options';
 import { isSearchResultState } from './search/navigation';
@@ -29,6 +30,22 @@ export default class MindMapPlugin extends Plugin {
   async onload() {
 
     await this.loadSettings();
+
+    this.addCommand({
+      id: 'import-xmind',
+      name: t('Import XMind file'),
+      callback: () => {
+        const folder = this.app.fileManager.getNewFileParent(this.app.workspace.getActiveFile()?.path || '');
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.accept = '.xmind';
+        picker.onchange = () => {
+          const file = picker.files?.[0];
+          if (file) void this.importXmind(file, folder);
+        };
+        picker.click();
+      }
+    });
 
     this.addCommand({
       id: 'Create New MindMap',
@@ -1197,6 +1214,51 @@ export default class MindMapPlugin extends Plugin {
     this.app.workspace.detachLeavesOfType(mindmapViewType);
     //this.app.workspace.unregisterHoverLinkSource(frontMatterKey);
 
+  }
+
+  private async importXmind(source: File, folder: TFolder) {
+    const { vault, workspace } = this.app;
+    const written: TFile[] = [];
+    let note: TFile;
+    let result: XmindImport;
+    try {
+      const prefix = 'xmind-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+      if (source.size > MAX_XMIND_BYTES) throw Error('XMind file exceeds 50 MB');
+      result = await convertXmind(await source.arrayBuffer(), this.settings.headLevel, prefix);
+      if (result.assets.length && !vault.getAbstractFileByPath('Assets')) {
+        try {
+          await vault.createFolder('Assets');
+        } catch (error) {
+          if (!(vault.getAbstractFileByPath('Assets') instanceof TFolder)) throw error;
+        }
+      }
+      for (const asset of result.assets) {
+        written.push(await vault.createBinary(asset.path, asset.data));
+      }
+      const name = source.name.replace(/\.xmind$/i, '')
+        .replace(/[<>:"/\\|?*#^[\]]/g, '_').replace(/^[ .]+|[ .]+$/g, '') || 'XMind';
+      const base = (folder && !folder.isRoot() ? folder.path + '/' : '') + name;
+      let path = base + '.md';
+      for (let suffix = 2; vault.getAbstractFileByPath(path); suffix++) path = base + ' ' + suffix + '.md';
+      note = await vault.create(path, result.markdown);
+    } catch (error) {
+      for (const asset of written) {
+        try { await vault.delete(asset); } catch (cleanupError) { console.error(cleanupError); }
+      }
+      new Notice(t('XMind import failed') + ' ' + (error instanceof Error ? error.message : String(error)));
+      return;
+    }
+
+    new Notice(t('XMind imported') + ' ' + note.path + (result.skippedImages
+      ? ' · ' + t('Unsupported XMind images') + ' ' + result.skippedImages
+      : ''));
+    try {
+      await workspace.getLeaf(true).setViewState({
+        type: mindmapViewType, state: { file: note.path }, active: true
+      });
+    } catch (error) {
+      console.error('Could not open imported XMind note', error);
+    }
   }
 
   async newMindMap(folder?: TFolder) {

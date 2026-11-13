@@ -157,6 +157,10 @@ export default {
     "Redo": "重做",
   // main.ts
   "Open as mindmap board": "打开为思维导图",
+  "Import XMind file": "导入 XMind 文件",
+  "XMind import failed": "XMind 导入失败",
+  "XMind imported": "已导入 XMind",
+  "Unsupported XMind images": "未导入的 XMind 图片数",
   "Create new mindmap": "创建新思维导图",
   "New mindmap board": "新建思维导图",
   "Untitled mindmap": "未命名思维导图",
