@@ -163,6 +163,7 @@ export default {
   "Unsupported XMind images": "未导入的 XMind 图片数",
   "Create new mindmap": "创建新思维导图",
   "New mindmap board": "新建思维导图",
+  "Import mindmap board": "导入思维导图",
   "Untitled mindmap": "未命名思维导图",
   "Open as markdown": "打开为 Markdown 文件",
 

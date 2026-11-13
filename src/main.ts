@@ -36,14 +36,7 @@ export default class MindMapPlugin extends Plugin {
       name: t('Import XMind file'),
       callback: () => {
         const folder = this.app.fileManager.getNewFileParent(this.app.workspace.getActiveFile()?.path || '');
-        const picker = document.createElement('input');
-        picker.type = 'file';
-        picker.accept = '.xmind';
-        picker.onchange = () => {
-          const file = picker.files?.[0];
-          if (file) void this.importXmind(file, folder);
-        };
-        picker.click();
+        this.pickXmind(folder);
       }
     });
 
@@ -1216,6 +1209,17 @@ export default class MindMapPlugin extends Plugin {
 
   }
 
+  private pickXmind(folder: TFolder) {
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = '.xmind';
+    picker.onchange = () => {
+      const file = picker.files?.[0];
+      if (file) void this.importXmind(file, folder);
+    };
+    picker.click();
+  }
+
   private async importXmind(source: File, folder: TFolder) {
     const { vault, workspace } = this.app;
     const written: TFile[] = [];
@@ -1359,6 +1363,12 @@ export default class MindMapPlugin extends Plugin {
               .setTitle(`${t('New mindmap board')}`)
               .setIcon('document')
               .onClick(() => this.newMindMap(file));
+          });
+          menu.addItem(item => {
+            item
+              .setTitle(t('Import mindmap board'))
+              .setIcon('upload')
+              .onClick(() => this.pickXmind(file));
           });
         }
 

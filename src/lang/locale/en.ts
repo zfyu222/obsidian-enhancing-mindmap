@@ -153,6 +153,7 @@ export default {
     "Unsupported XMind images": "Unsupported XMind images",
     "Create new mindmap": "Create new mindmap",
     "New mindmap board": "New mindmap board",
+    "Import mindmap board": "Import mind map",
     "Untitled mindmap": "Untitled mindmap",
     "Open as markdown": "Open as markdown",
 
